@@ -1,0 +1,23 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/tpt-colour-core",
+    "crates/tpt-colour-icc",
+    "crates/tpt-colour-manage",
+    "crates/tpt-colour",
+]
+# The oracle crate links LittleCMS (C) for tests only and is never shipped.
+exclude = ["crates/tpt-colour-oracle"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "MIT OR Apache-2.0"
+
+[workspace.dependencies]
+tpt-colour-core = { path = "crates/tpt-colour-core", default-features = false }
+tpt-colour-icc = { path = "crates/tpt-colour-icc", default-features = false }
+tpt-colour-manage = { path = "crates/tpt-colour-manage", default-features = false }
+palette = { version = "0.7", default-features = false, features = ["libm"] }
+winnow = { version = "0.7", default-features = false, features = ["alloc"] }

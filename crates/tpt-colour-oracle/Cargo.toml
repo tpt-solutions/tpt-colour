@@ -1,0 +1,8 @@
+[package]
+name = "tpt-colour-oracle"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+# Test-only: compares against LittleCMS. Never a dependency of shipped crates.
+[dependencies]
