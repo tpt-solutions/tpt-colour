@@ -40,6 +40,8 @@ Run the example with `cargo run -p tpt-colour --example convert`.
 - **Pure Rust in shipped crates.** No C-FFI or `-sys` crates. `cargo deny` enforces this.
 - **Deterministic maths.** Operations keep a fixed order, avoid FMA, and use `libm`
   rather than platform `std` maths, so results match bit-for-bit across targets.
+- **Precision.** Bulk transforms use f32 with curves baked into 4096-point tables, which
+  is accurate to about 2e-5. Single-colour matrix/TRC transforms use exact f64 curves.
 - **No `unsafe`.** `unsafe_code` is forbidden at the workspace level.
 - **Bounded parsing.** Malformed or hostile ICC data returns an error. It never panics or allocates without limit.
 

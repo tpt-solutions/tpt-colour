@@ -353,14 +353,31 @@ fn lut_profile_rejects_wrong_channel_counts() {
 }
 
 #[test]
-fn missing_intent_table_is_unsupported() {
+fn missing_intent_table_falls_back_to_perceptual() {
+    // The test profile only has A2B0, so relative colorimetric must use it, as the ICC does.
     let profile = cmyk_profile(5);
-    let r = ColourTransform::new(
+    let relative = ColourTransform::new(
         &profile,
         &IccProfile::srgb(),
         RenderingIntent::RelativeColorimetric,
-    );
-    assert_eq!(r.err(), Some(IccError::Unsupported));
+    )
+    .unwrap();
+    let perceptual =
+        ColourTransform::new(&profile, &IccProfile::srgb(), RenderingIntent::Perceptual).unwrap();
+    let cmyk = [0.2_f32, 0.3, 0.4, 0.1];
+    let mut x = [0.0_f32; 3];
+    let mut y = [0.0_f32; 3];
+    relative.transform(&cmyk, &mut x).unwrap();
+    perceptual.transform(&cmyk, &mut y).unwrap();
+    assert_eq!(x.map(f32::to_bits), y.map(f32::to_bits));
+}
+
+#[test]
+fn profile_without_any_table_is_unsupported() {
+    // Only a matrix-free CMYK profile with no A2B or B2A tags at all.
+    let bytes = assemble(b"CMYK", b"Lab ", 4, &[(*b"desc", vec![0_u8; 4])]);
+    // A CMYK profile has no matrix model, so with no LUT tables it cannot be used at all.
+    assert_eq!(IccProfile::parse(&bytes).err(), Some(IccError::Unsupported));
 }
 
 /// Black point compensation maps the source black onto the destination black.
@@ -376,10 +393,11 @@ fn black_point_compensation_lifts_black_to_destination_black() {
         lab
     };
     let a2b = sample_grid(4, 9, lifted);
+    // Version 2, so the uncompensated baseline is not implicitly compensated (see `ColourTransform::new`).
     let bytes = assemble(
         b"CMYK",
         b"Lab ",
-        4,
+        2,
         &[(*b"A2B0", mab_tag(b"mAB ", 4, 3, 9, &a2b))],
     );
     let profile = IccProfile::parse(&bytes).unwrap();

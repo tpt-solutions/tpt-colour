@@ -129,6 +129,77 @@ impl Pipeline {
     }
 }
 
+impl Pipeline {
+    /// Makes device white map exactly to PCS white, as `LittleCMS` does for Lab-PCS LUTs.
+    ///
+    /// The device white is `1` for RGB and grey and `0` for CMYK, which are the same values
+    /// `LittleCMS` uses. If the pipeline maps it to something else, the single CLUT node at that
+    /// point is overwritten with the PCS white, after undoing any output curves. Returns `None`
+    /// when nothing needs changing or when the pipeline's shape does not allow a patch.
+    pub(crate) fn with_white_patched(
+        &self,
+        device_white: &[f32],
+        pcs_white: [f32; 3],
+    ) -> Option<Pipeline> {
+        let mut obtained = [0.0_f32; 3];
+        self.eval(device_white, &mut obtained).ok()?;
+        let tolerance = 2.0 / 65_535.0;
+        if (0..3).all(|i| (obtained[i] - pcs_white[i]).abs() <= tolerance) {
+            return None;
+        }
+        let k = self
+            .stages
+            .iter()
+            .position(|s| matches!(s, Stage::Clut(_)))?;
+        // Input side: only curves, and the device white must land exactly on a grid node.
+        let mut coords = [0.0_f32; MAX_CHANNELS];
+        coords[..device_white.len()].copy_from_slice(device_white);
+        for stage in &self.stages[..k] {
+            match stage {
+                Stage::Curves(curves) => {
+                    for (v, c) in coords.iter_mut().zip(curves) {
+                        *v = c.eval(*v);
+                    }
+                }
+                _ => return None,
+            }
+        }
+        let Stage::Clut(clut) = &self.stages[k] else {
+            return None;
+        };
+        let mut index = 0_usize;
+        let mut point = [0_usize; MAX_CHANNELS];
+        for d in 0..clut.in_ch {
+            let pos = coords[d] * (clut.grid[d] - 1) as f32;
+            let node = (pos + 0.5) as usize;
+            if (pos - node as f32).abs() > 1e-4 {
+                return None;
+            }
+            point[d] = node;
+            index = index * clut.grid[d] + point[d];
+        }
+        // Output side: only curves, inverted, so the stored node value is the pre-curve value.
+        let mut target = pcs_white;
+        for stage in &self.stages[k + 1..] {
+            match stage {
+                Stage::Curves(curves) => {
+                    for (v, c) in target.iter_mut().zip(curves) {
+                        *v = c.eval_inverse(*v);
+                    }
+                }
+                _ => return None,
+            }
+        }
+        let mut patched = self.clone();
+        let Stage::Clut(clut) = &mut patched.stages[k] else {
+            return None;
+        };
+        let start = index * clut.out_ch;
+        clut.values[start..start + 3].copy_from_slice(&target);
+        Some(patched)
+    }
+}
+
 /// An n-dimensional lookup table. The first input varies slowest, and outputs are contiguous.
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct Clut {

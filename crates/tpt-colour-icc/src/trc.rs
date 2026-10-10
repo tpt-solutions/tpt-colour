@@ -184,3 +184,133 @@ fn parametric_inverse(function: u16, p: &[f32; 7], y: f32) -> f32 {
         _ => y,
     }
 }
+
+/// Double-precision evaluation, for the single-colour path. Uses exact curves, not baked tables.
+impl Trc {
+    /// Encoded → linear in `f64`. The input is clamped to `[0, 1]`.
+    #[must_use]
+    pub(crate) fn eval64(&self, x: f64) -> f64 {
+        let x = x.clamp(0.0, 1.0);
+        match self {
+            Self::Identity => x,
+            Self::Gamma(g) => libm::pow(x, f64::from(*g)),
+            Self::Table(t) => table_eval64(t, x),
+            Self::Parametric { function, params } => {
+                let p = params.map(f64::from);
+                parametric_eval64(*function, &p, x)
+            }
+        }
+    }
+
+    /// Linear → encoded in `f64`. The input and result are clamped to `[0, 1]`.
+    #[must_use]
+    pub(crate) fn eval_inverse64(&self, y: f64) -> f64 {
+        let y = y.clamp(0.0, 1.0);
+        let x = match self {
+            Self::Identity => y,
+            Self::Gamma(g) => libm::pow(y, 1.0 / f64::from(*g)),
+            Self::Table(t) => table_inverse64(t, y),
+            Self::Parametric { function, params } => {
+                let p = params.map(f64::from);
+                parametric_inverse64(*function, &p, y)
+            }
+        };
+        x.clamp(0.0, 1.0)
+    }
+}
+
+fn table_eval64(t: &[f32], x: f64) -> f64 {
+    if t.len() < 2 {
+        return x;
+    }
+    let pos = x * (t.len() - 1) as f64;
+    let i = (pos as usize).min(t.len() - 2);
+    let frac = pos - i as f64;
+    f64::from(t[i]) + (f64::from(t[i + 1]) - f64::from(t[i])) * frac
+}
+
+fn table_inverse64(t: &[f32], y: f64) -> f64 {
+    if t.len() < 2 {
+        return y;
+    }
+    let i = t.partition_point(|&v| f64::from(v) < y);
+    if i == 0 {
+        return 0.0;
+    }
+    if i >= t.len() {
+        return 1.0;
+    }
+    let (v0, v1) = (f64::from(t[i - 1]), f64::from(t[i]));
+    let frac = if v1 > v0 { (y - v0) / (v1 - v0) } else { 0.0 };
+    ((i - 1) as f64 + frac) / (t.len() - 1) as f64
+}
+
+#[allow(clippy::many_single_char_names)] // Parameters are named after the ICC specification.
+fn parametric_eval64(function: u16, p: &[f64; 7], x: f64) -> f64 {
+    let [g, a, b, c, d, e, f] = *p;
+    let base = |x: f64| (a * x + b).max(0.0);
+    match function {
+        0 => libm::pow(x, g),
+        1 => {
+            if x >= -b / a {
+                libm::pow(base(x), g)
+            } else {
+                0.0
+            }
+        }
+        2 => {
+            if x >= -b / a {
+                libm::pow(base(x), g) + c
+            } else {
+                c
+            }
+        }
+        3 => {
+            if x >= d {
+                libm::pow(base(x), g)
+            } else {
+                c * x
+            }
+        }
+        4 => {
+            if x >= d {
+                libm::pow(base(x), g) + e
+            } else {
+                c * x + f
+            }
+        }
+        _ => x,
+    }
+}
+
+#[allow(clippy::many_single_char_names)] // Parameters are named after the ICC specification.
+fn parametric_inverse64(function: u16, p: &[f64; 7], y: f64) -> f64 {
+    let [g, a, b, c, d, e, f] = *p;
+    let inv_g = 1.0 / g;
+    match function {
+        0 => libm::pow(y, inv_g),
+        1 => (libm::pow(y, inv_g) - b) / a,
+        2 => {
+            if y >= c {
+                (libm::pow((y - c).max(0.0), inv_g) - b) / a
+            } else {
+                -b / a
+            }
+        }
+        3 => {
+            if y >= c * d {
+                (libm::pow(y, inv_g) - b) / a
+            } else {
+                y / c
+            }
+        }
+        4 => {
+            if y >= c * d + f {
+                (libm::pow((y - e).max(0.0), inv_g) - b) / a
+            } else {
+                (y - f) / c
+            }
+        }
+        _ => y,
+    }
+}

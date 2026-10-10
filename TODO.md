@@ -22,7 +22,7 @@ Conventions: British English everywhere (`colour`, `ColourSpace`, `tpt_colour`, 
 - [x] CMYK type (naive fallback documented; ICC conversion pending Phase 2)
 - [x] Chromatic adaptation (D50 ⇄ D65, Bradford)
 - [x] YCbCr → RGB matrices (Rec. 709 / Rec. 2020) for tpt-kinetix
-- [ ] Deterministic maths policy: f32 API, f64 for single-colour path, fixed op order, no FMA, `libm` (no platform `std` maths)
+- [x] Deterministic maths policy: f32 API, f64 for single-colour path, fixed op order, no FMA, `libm` (no platform `std` maths). Single-colour matrix/TRC transforms (`ColourTransform::transform_rgb`, and managed transforms without a gamut) use exact f64 curves. LUT pipelines and gamut mapping still run in f32
 - [x] Tests: round-trips, known reference values
 
 ### `tpt_colour::composite`
@@ -67,7 +67,7 @@ Conventions: British English everywhere (`colour`, `ColourSpace`, `tpt_colour`, 
 - [ ] Publish v1.0.0 (not done: publishing is outward-facing and needs confirmation; version is still 0.1.0)
 
 ## Testing & Quality
-- [x] Oracle crate: LittleCMS comparison (LittleCMS 2.17 via Pillow generated the fixtures; profiles are read from `TPT_ICC_DIR` and not shipped). Covers system RSWOP CMYK→sRGB and gamma-1.8 RGB→sRGB, not the official ICC test set yet
+- [x] Oracle crate: LittleCMS comparison (LittleCMS 2.17 via Pillow generated the fixtures). Covers system RSWOP CMYK and gamma-1.8 RGB, official sRGB v2 and v4 (LUT), and the Probe, PRMG and ROMM test profiles from `TPT_ICC_DIR`. Five cases diverge, see the ICC test profile item
 - [x] Define parity tolerances against LittleCMS: ≤ 1 8-bit code (measured worst case is 1). Expressed in codes, not ΔE
 - [x] Golden-file gradient mesh test (raw pixel bytes vs PNG, `png` is a dev-dependency only). The golden is self-generated, so it guards regressions rather than providing an independent reference
 - [x] Fuzzing (`cargo-fuzz`) of `icc::parse()`: target in `fuzz/` compiles here and runs in CI on Linux. Not run locally (libFuzzer needs Linux). A deterministic mutation test runs in the normal suite (20 000 cases)
@@ -75,7 +75,16 @@ Conventions: British English everywhere (`colour`, `ColourSpace`, `tpt_colour`, 
 - [x] Benchmarks: `examples/bench.rs` (best of 5). Baked TRC tables took the scalar matrix path from about 2 to about 17 Mpx/s. The `simd` batch is bit-identical to scalar but about 2× slower in this kernel. Plain `[f32; 8]` arrays run at scalar speed, so the overhead is in tpt-simd-vector's lane ops. Feed this back upstream
 - [x] `#![forbid(unsafe_code)]` where possible; audit any `unsafe`: `unsafe_code = forbid` at workspace level and no `unsafe` in the source
 
+## LittleCMS parity follow-ups
+- [ ] Port LittleCMS's destination-version rule: perceptual and saturation force black point compensation when the destination profile is v4 (we check the source). Land together with the next item, since RSWOP depends on the detected black
+- [ ] Port LittleCMS's round-trip black point detection for CMYK, RGB and grey LUT profiles (Adobe-style search). Our compensation uses the device black directly
+- [ ] Explain the PRMG relative residual: 7 codes on 5 out-of-gamut samples, where LittleCMS keeps a small positive linear red and we clip to 0. Ruled out so far: black compensation, white patch, 16-bit PCS quantisation
+- [ ] Explain the ROMM residuals: 9 codes relative and 6 codes perceptual on saturated colours, with XYZ PCS
+- [ ] Explain the Probe v4 divergence (84 codes relative, 255 perceptual). The profile's proofing tables are deliberately distorted, so this may be a stress case rather than a bug
+- [ ] Re-enable the five `#[ignore]`d oracle cases once the items above are resolved
+- [ ] Run iccDEV's Profile Dump validator on the official and test profiles
+
 ## Open Items (non-blocking, assumed defaults)
 - [x] Minimum Rust version: 1.85 for the default build (checked). The `simd` feature needs 1.95 (tpt-simd)
-- [ ] Which ICC test profile set to use as fixtures
-- [ ] Scope of `mpet` support in v1.0
+- [ ] Which ICC test profile set to use as fixtures. Done: official sRGB v2 and v4 committed (ICC licence allows copying); Probe v4, PRMG and ROMM checked against LittleCMS from `TPT_ICC_DIR` (not committed; "as is" terms). Matched within 1 code: sRGB v2/v4, PRMG perceptual, RSWOP. Implemented from the LittleCMS source: fallback to the perceptual table when an intent's table is missing, and the white-on-white node patch for Lab-PCS LUTs. Still open, five cases ignored in the oracle with measured errors: (1) Probe v4 CMYK: 84 codes relative and 255 perceptual; its proofing tables are deliberately distorted, and LittleCMS's black handling differs. (2) PRMG relative: 7 codes on 5 out-of-gamut samples, where LittleCMS keeps a small positive linear red. Ruled out: black compensation, white patch, and 16-bit PCS quantisation. (3) ROMM relative 9 and perceptual 6 codes on saturated colours, XYZ PCS, cause not isolated. Not yet ported: LittleCMS's destination-version rule for perceptual compensation (LittleCMS checks the destination profile, we check the source), and its Adobe-style round-trip black detection for LUT profiles. These must go together, because RSWOP depends on the detected black. iccDEV's validator is still not run.
+- [x] Scope of `mpet` support in v1.0: out of scope. Returns `Unsupported`

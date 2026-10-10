@@ -257,3 +257,21 @@ fn parametric_curves_invert() {
         }
     }
 }
+
+/// The single-colour path evaluates exact curves in f64, so it should match the core reference
+/// to f32 rounding, far tighter than the baked-table path.
+#[test]
+fn single_colour_path_matches_reference_to_f32_precision() {
+    let fwd = ColourTransform::new(
+        &IccProfile::srgb(),
+        &IccProfile::display_p3(),
+        RenderingIntent::Perceptual,
+    )
+    .unwrap();
+    for c in SAMPLES {
+        let expected = DisplayP3
+            .from_xyz(SRgb.to_xyz(c))
+            .map(|v| v.clamp(0.0, 1.0));
+        assert_near(fwd.rgb(c), expected, 2e-6);
+    }
+}

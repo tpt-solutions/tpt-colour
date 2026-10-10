@@ -13,6 +13,7 @@ use std::time::{Duration, Instant};
 use tpt_colour::ColourManager;
 use tpt_colour::icc::RenderingIntent;
 use tpt_colour::manage::{Gamut, map_to_gamut};
+use tpt_colour::space::ColourSpace;
 
 const PIXELS: usize = 1_000_000;
 const RUNS: usize = 5;
@@ -81,17 +82,19 @@ fn main() {
         }),
     );
 
+    // Out-of-gamut for sRGB, so every call runs the chroma search rather than returning early.
     let target = Gamut::srgb();
+    let out_of_gamut = ColourSpace::to_xyz(&tpt_colour::space::DisplayP3, [0.0, 1.0, 0.0]);
     let elapsed = (0..RUNS)
         .map(|_| {
             let start = Instant::now();
             for i in 0..PIXELS {
-                let v = 0.4 + i as f32 * 1e-7;
-                black_box(map_to_gamut(&target, [v, 0.3, 0.2]));
+                let v = out_of_gamut[0] + i as f32 * 1e-9;
+                black_box(map_to_gamut(&target, [v, out_of_gamut[1], out_of_gamut[2]]));
             }
             start.elapsed()
         })
         .min()
         .expect("RUNS > 0");
-    report("OKLCH gamut mapping alone (XYZ in/out)", elapsed);
+    report("OKLCH gamut mapping, out-of-gamut input", elapsed);
 }

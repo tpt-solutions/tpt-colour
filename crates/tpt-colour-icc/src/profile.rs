@@ -127,16 +127,23 @@ pub struct LutTables {
 }
 
 impl LutTables {
-    /// Device → PCS pipeline for `intent`, if the profile provides one.
+    /// Device → PCS pipeline for `intent`.
+    ///
+    /// If the profile has no table for that intent, the perceptual table is used, as the ICC
+    /// specification and `LittleCMS` both do.
     #[must_use]
     pub fn a2b(&self, intent: RenderingIntent) -> Option<&Pipeline> {
-        self.a2b[intent.tag_index()].as_ref()
+        self.a2b[intent.tag_index()]
+            .as_ref()
+            .or(self.a2b[0].as_ref())
     }
 
-    /// PCS → device pipeline for `intent`, if the profile provides one.
+    /// PCS → device pipeline for `intent`, with the same perceptual fallback as [`LutTables::a2b`].
     #[must_use]
     pub fn b2a(&self, intent: RenderingIntent) -> Option<&Pipeline> {
-        self.b2a[intent.tag_index()].as_ref()
+        self.b2a[intent.tag_index()]
+            .as_ref()
+            .or(self.b2a[0].as_ref())
     }
 }
 

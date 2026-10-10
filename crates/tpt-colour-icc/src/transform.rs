@@ -110,10 +110,82 @@ pub struct ColourTransform {
     backward: Backward,
     black: Option<BlackPoints>,
     intent: RenderingIntent,
+    exact: Option<ExactMatrix>,
+}
+
+/// Double-precision matrix/TRC path, used by [`ColourTransform::transform_rgb`].
+///
+/// It keeps the profiles' own curves, not the baked tables, so a single colour is evaluated
+/// to f64 precision.
+#[derive(Clone, Debug, PartialEq)]
+struct ExactMatrix {
+    src: [[f64; 3]; 3],
+    src_trc: [Trc; 3],
+    dst_inv: [[f64; 3]; 3],
+    dst_trc: [Trc; 3],
+}
+
+impl ExactMatrix {
+    fn apply(&self, rgb: [f32; 3]) -> [f32; 3] {
+        let lin = [0, 1, 2].map(|c| self.src_trc[c].eval64(f64::from(rgb[c])));
+        let xyz = mul64(&self.src, lin);
+        let dst_lin = mul64(&self.dst_inv, xyz);
+        [0, 1, 2].map(|c| self.dst_trc[c].eval_inverse64(dst_lin[c]) as f32)
+    }
+}
+
+fn mul64(m: &[[f64; 3]; 3], v: [f64; 3]) -> [f64; 3] {
+    [0, 1, 2].map(|r| m[r][0] * v[0] + m[r][1] * v[1] + m[r][2] * v[2])
+}
+
+/// Builds the f64 path when both profiles are matrix/TRC.
+fn exact_matrix(src: &IccProfile, dst: &IccProfile) -> Option<ExactMatrix> {
+    let (ProfileModel::Matrix(s), ProfileModel::Matrix(d)) = (&src.model, &dst.model) else {
+        return None;
+    };
+    let dst_m = d.colorants.map(|r| r.map(f64::from));
+    let dst_inv = invert64(&dst_m)?;
+    Some(ExactMatrix {
+        src: s.colorants.map(|r| r.map(f64::from)),
+        src_trc: s.trc.clone(),
+        dst_inv,
+        dst_trc: d.trc.clone(),
+    })
+}
+
+#[allow(clippy::many_single_char_names)] // Cofactor expansion reads most naturally with a..i.
+fn invert64(m: &[[f64; 3]; 3]) -> Option<[[f64; 3]; 3]> {
+    let [[a, b, c], [d, e, f], [g, h, i]] = *m;
+    let det = a * (e * i - f * h) - b * (d * i - f * g) + c * (d * h - e * g);
+    if det.abs() < 1e-12 {
+        return None;
+    }
+    let k = 1.0 / det;
+    Some([
+        [
+            (e * i - f * h) * k,
+            (c * h - b * i) * k,
+            (b * f - c * e) * k,
+        ],
+        [
+            (f * g - d * i) * k,
+            (a * i - c * g) * k,
+            (c * d - a * f) * k,
+        ],
+        [
+            (d * h - e * g) * k,
+            (b * g - a * h) * k,
+            (a * e - b * d) * k,
+        ],
+    ])
 }
 
 impl ColourTransform {
-    /// Builds a transform from `src` to `dst` for `intent`, without black point compensation.
+    /// Builds a transform from `src` to `dst` for `intent`.
+    ///
+    /// Perceptual transforms from an ICC v4 source apply black point compensation implicitly,
+    /// as the v4 specification and `LittleCMS` do. Everything else uses no compensation.
+    /// Use [`ColourTransform::with_black_point_compensation`] to force it for other cases.
     ///
     /// # Errors
     ///
@@ -124,12 +196,8 @@ impl ColourTransform {
         dst: &IccProfile,
         intent: RenderingIntent,
     ) -> Result<Self, IccError> {
-        Ok(Self {
-            forward: forward(src, intent)?,
-            backward: backward(dst, intent)?,
-            black: None,
-            intent,
-        })
+        let implicit = intent == RenderingIntent::Perceptual && src.version.major >= 4;
+        Self::build(src, dst, intent, implicit)
     }
 
     /// Builds a transform with black point compensation.
@@ -146,14 +214,31 @@ impl ColourTransform {
         dst: &IccProfile,
         intent: RenderingIntent,
     ) -> Result<Self, IccError> {
-        let mut t = Self::new(src, dst, intent)?;
-        if intent != RenderingIntent::AbsoluteColorimetric {
+        Self::build(src, dst, intent, true)
+    }
+
+    fn build(
+        src: &IccProfile,
+        dst: &IccProfile,
+        intent: RenderingIntent,
+        compensate: bool,
+    ) -> Result<Self, IccError> {
+        let mut t = Self {
+            forward: forward(src, intent)?,
+            backward: backward(dst, intent)?,
+            black: None,
+            intent,
+            exact: exact_matrix(src, dst),
+        };
+        if compensate && intent != RenderingIntent::AbsoluteColorimetric {
             let src_black = black_point(&t.forward)?;
             let dst_black = black_point(&forward(dst, intent)?)?;
             t.black = Some(BlackPoints {
                 src: src_black,
                 dst: dst_black,
             });
+            // Black point compensation stays in f32, so the exact path no longer applies.
+            t.exact = None;
         }
         Ok(t)
     }
@@ -221,10 +306,19 @@ impl ColourTransform {
 
     /// Transforms one RGB triple.
     ///
+    /// For matrix/TRC profiles without black point compensation, this is the single-colour
+    /// path: it evaluates the profiles' exact curves in f64. Other profiles use the f32 path.
+    /// The two agree to about 2e-5, the error of the baked tables used by [`transform`](Self::transform).
+    ///
     /// # Errors
     ///
     /// Returns [`IccError::ChannelCount`] unless both profiles are three-channel.
     pub fn transform_rgb(&self, rgb: [f32; 3]) -> Result<[f32; 3], IccError> {
+        if let Some(exact) = &self.exact {
+            if self.src_channels() == 3 && self.dst_channels() == 3 {
+                return Ok(exact.apply(rgb));
+            }
+        }
         let mut out = [0.0_f32; 3];
         self.transform(&rgb, &mut out)?;
         Ok(out)
@@ -343,6 +437,7 @@ fn forward(profile: &IccProfile, intent: RenderingIntent) -> Result<Forward, Icc
             {
                 return Err(IccError::Unsupported);
             }
+            let pipeline = white_patched(pipeline, profile, intent);
             Ok(Forward::Lut {
                 pipeline,
                 pcs: profile.pcs,
@@ -393,4 +488,25 @@ fn compensate(xyz: [f32; 3], black: &BlackPoints) -> [f32; 3] {
         }
     }
     out
+}
+
+/// Applies the `LittleCMS` white-on-white correction to a device → Lab pipeline.
+///
+/// Like `LittleCMS`, it applies only to Lab-PCS profiles and to non-absolute intents. The device
+/// white is `1` for RGB and grey, and `0` for CMYK.
+fn white_patched(pipeline: Pipeline, profile: &IccProfile, intent: RenderingIntent) -> Pipeline {
+    if profile.pcs != ProfileConnectionSpace::Lab || intent == RenderingIntent::AbsoluteColorimetric
+    {
+        return pipeline;
+    }
+    let white_level = if profile.device_channels == 4 {
+        0.0
+    } else {
+        1.0
+    };
+    let device_white = [white_level; MAX_CHANNELS];
+    let pcs_white = pcs::encode(ProfileConnectionSpace::Lab, pipeline.encoding(), D50);
+    pipeline
+        .with_white_patched(&device_white[..profile.device_channels], pcs_white)
+        .unwrap_or(pipeline)
 }

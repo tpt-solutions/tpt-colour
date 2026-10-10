@@ -92,9 +92,20 @@ impl Gamut {
     /// Whether an XYZ (D65) colour lies inside the gamut.
     #[must_use]
     pub fn contains(&self, xyz: [f32; 3]) -> bool {
-        self.to_linear(xyz)
-            .iter()
+        Self::linear_in_gamut(self.to_linear(xyz))
+    }
+
+    /// Whether linear RGB, from [`Gamut::to_linear`], lies inside `[0, 1]` (with tolerance).
+    #[must_use]
+    pub(crate) fn linear_in_gamut(lin: [f32; 3]) -> bool {
+        lin.iter()
             .all(|&v| (-CONTAINMENT_EPSILON..=1.0 + CONTAINMENT_EPSILON).contains(&v))
+    }
+
+    /// Clips linear RGB to `[0, 1]` and returns the clipped colour as XYZ (D65).
+    #[must_use]
+    pub(crate) fn clip_linear(&self, lin: [f32; 3]) -> [f32; 3] {
+        mul_vec(&self.to_xyz, lin.map(|v| v.clamp(0.0, 1.0)))
     }
 
     /// Clips an XYZ (D65) colour to the gamut by clamping its linear RGB to `[0, 1]`.
@@ -103,8 +114,7 @@ impl Gamut {
     /// [`crate::map_to_gamut`] to preserve perceived lightness and hue.
     #[must_use]
     pub fn clip(&self, xyz: [f32; 3]) -> [f32; 3] {
-        let lin = self.to_linear(xyz).map(|v| v.clamp(0.0, 1.0));
-        mul_vec(&self.to_xyz, lin)
+        self.clip_linear(self.to_linear(xyz))
     }
 
     /// The colorant matrix (linear RGB → XYZ D65).

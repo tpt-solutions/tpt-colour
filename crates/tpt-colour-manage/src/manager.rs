@@ -62,7 +62,13 @@ impl ManagedTransform {
     /// # Errors
     ///
     /// Returns [`IccError::ChannelCount`] unless both profiles are three-channel.
+    ///
+    /// Without a destination gamut there is nothing to map, so this uses the ICC single-colour
+    /// path (f64). With a gamut, the mapping runs in f32 as usual.
     pub fn transform_rgb(&self, rgb: [f32; 3]) -> Result<[f32; 3], IccError> {
+        if self.gamut.is_none() {
+            return self.inner.transform_rgb(rgb);
+        }
         let mut out = [0.0_f32; 3];
         self.transform(&rgb, &mut out)?;
         Ok(out)

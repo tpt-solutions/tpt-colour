@@ -1,6 +1,6 @@
 //! Perceptual gamut mapping by chroma reduction in OKLCH, following CSS Color Level 4 §13.2.
 
-use tpt_colour_core::space::{ColourSpace, Oklab, Oklch};
+use tpt_colour_core::space::{ColourSpace, Oklab};
 
 use crate::gamut::Gamut;
 
@@ -18,34 +18,46 @@ const EPSILON: f32 = 0.0001;
 /// Colours already inside the gamut are returned unchanged.
 #[must_use]
 pub fn map_to_gamut(gamut: &Gamut, xyz: [f32; 3]) -> [f32; 3] {
-    let origin = Oklch.from_xyz(xyz);
+    if gamut.contains(xyz) {
+        return xyz;
+    }
+    let origin = Oklab.from_xyz(xyz);
     let lightness = origin[0];
     if lightness >= 1.0 {
-        return Oklch.to_xyz([1.0, 0.0, 0.0]);
+        return Oklab.to_xyz([1.0, 0.0, 0.0]);
     }
     if lightness <= 0.0 {
         return [0.0, 0.0, 0.0];
     }
-    if gamut.contains(xyz) {
-        return xyz;
-    }
 
-    let (mut clipped, mut delta) = clip_candidate(gamut, origin);
+    // Hue is fixed during the chroma search, so its cosine and sine are computed once.
+    let (a0, b0) = (origin[1], origin[2]);
+    let chroma0 = libm::sqrtf(a0 * a0 + b0 * b0);
+    let (cos_h, sin_h) = if chroma0 > 0.0 {
+        (a0 / chroma0, b0 / chroma0)
+    } else {
+        (1.0, 0.0)
+    };
+    let at = |chroma: f32| [lightness, chroma * cos_h, chroma * sin_h];
+
+    let lab0 = at(chroma0);
+    let (mut clipped, mut delta) = clip_candidate(gamut, lab0, gamut.to_linear(Oklab.to_xyz(lab0)));
     if delta < JND {
         return clipped;
     }
 
-    let (mut min, mut max) = (0.0_f32, origin[1]);
+    let (mut min, mut max) = (0.0_f32, chroma0);
     let mut min_in_gamut = true;
-    let mut current = origin;
     while max - min > EPSILON {
         let chroma = f32::midpoint(min, max);
-        current[1] = chroma;
-        if min_in_gamut && gamut.contains(Oklch.to_xyz(current)) {
+        let lab = at(chroma);
+        let xyz = Oklab.to_xyz(lab);
+        let lin = gamut.to_linear(xyz);
+        if min_in_gamut && Gamut::linear_in_gamut(lin) {
             min = chroma;
             continue;
         }
-        (clipped, delta) = clip_candidate(gamut, current);
+        (clipped, delta) = clip_candidate(gamut, lab, lin);
         if delta < JND {
             if JND - delta < EPSILON {
                 return clipped;
@@ -59,13 +71,13 @@ pub fn map_to_gamut(gamut: &Gamut, xyz: [f32; 3]) -> [f32; 3] {
     clipped
 }
 
-/// Clips an OKLCH candidate and reports the ΔEOK between the clipped and unclipped colours.
-fn clip_candidate(gamut: &Gamut, lch: [f32; 3]) -> ([f32; 3], f32) {
-    let xyz = Oklch.to_xyz(lch);
-    let clipped = gamut.clip(xyz);
-    let a = Oklab.from_xyz(clipped);
-    let b = Oklab.from_xyz(xyz);
-    let (dl, da, db) = (a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+/// Clips an Oklab candidate and reports the ΔEOK between the clipped and unclipped colours.
+///
+/// `lin` is the candidate's linear RGB, which the caller has already computed.
+fn clip_candidate(gamut: &Gamut, lab: [f32; 3], lin: [f32; 3]) -> ([f32; 3], f32) {
+    let clipped = gamut.clip_linear(lin);
+    let c = Oklab.from_xyz(clipped);
+    let (dl, da, db) = (c[0] - lab[0], c[1] - lab[1], c[2] - lab[2]);
     let delta = libm::sqrtf(dl * dl + da * da + db * db);
     (clipped, delta)
 }
