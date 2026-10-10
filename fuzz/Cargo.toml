@@ -1,0 +1,26 @@
+[package]
+name = "tpt-colour-fuzz"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+# Coverage-guided fuzzing of the ICC parser. Requires Linux or macOS (libFuzzer):
+#   cargo install cargo-fuzz
+#   cargo +nightly fuzz run icc_parse
+# This is a separate workspace so the main workspace builds without nightly.
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+tpt-colour-icc = { path = "../crates/tpt-colour-icc" }
+
+[[bin]]
+name = "icc_parse"
+path = "fuzz_targets/icc_parse.rs"
+test = false
+doc = false
+bench = false
+
+[workspace]

@@ -14,3 +14,6 @@ simd = []
 tpt-colour-core.workspace = true
 tpt-colour-icc.workspace = true
 tpt-colour-manage.workspace = true
+
+[lints]
+workspace = true

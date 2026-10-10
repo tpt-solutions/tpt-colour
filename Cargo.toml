@@ -15,9 +15,22 @@ edition = "2024"
 rust-version = "1.85"
 license = "MIT OR Apache-2.0"
 
+[workspace.lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+# Float maths in colour code casts deliberately between f32/f64 and integer channels.
+cast_precision_loss = "allow"
+cast_possible_truncation = "allow"
+cast_sign_loss = "allow"
+module_name_repetitions = "allow"
+
 [workspace.dependencies]
-tpt-colour-core = { path = "crates/tpt-colour-core", default-features = false }
-tpt-colour-icc = { path = "crates/tpt-colour-icc", default-features = false }
-tpt-colour-manage = { path = "crates/tpt-colour-manage", default-features = false }
+tpt-colour-core = { path = "crates/tpt-colour-core", version = "0.1.0", default-features = false }
+tpt-colour-icc = { path = "crates/tpt-colour-icc", version = "0.1.0", default-features = false }
+tpt-colour-manage = { path = "crates/tpt-colour-manage", version = "0.1.0", default-features = false }
 palette = { version = "0.7", default-features = false, features = ["libm"] }
-winnow = { version = "0.7", default-features = false, features = ["alloc"] }
+libm = { version = "0.2", default-features = false }

@@ -5,6 +5,9 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 
+[lints]
+workspace = true
+
 [features]
 default = []
 std = []
@@ -13,3 +16,8 @@ simd = []
 [dependencies]
 tpt-colour-core.workspace = true
 tpt-colour-icc.workspace = true
+libm.workspace = true
+
+[dev-dependencies]
+# Decodes the golden PNG in tests only; never a dependency of shipped crates.
+png = "0.17"

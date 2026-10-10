@@ -1,4 +1,4 @@
-Design Spec: tpt-color (Layer 1)
+Design Spec: tpt-colour (Layer 1)
 1. Mission & Scope
 Mission: To provide a unified, pure-Rust, high-performance color management substrate. It handles color representation, mathematical conversions, alpha compositing, ICC profile parsing, and gamut mapping. It ensures that a color defined in a CAD model (tpt-vertex) looks identical when exported to a PDF (tpt-doc) or rendered on a wide-gamut display (tpt-pwa).
 Scope:
@@ -14,7 +14,7 @@ Color Math: palette (The undisputed standard for pure-Rust color math, spaces, a
 Parsing: winnow or nom (For safely parsing the complex binary structures of ICC profiles).
 SIMD: tpt-simd (Internal TPT crate for portable SIMD abstractions).
 3. Core Modules & API Design
-Module A: tpt_color::space (Spaces & Math)
+Module A: tpt_colour::space (Spaces & Math)
 Acts as the orchestration layer over palette, adding TPT-specific traits and ensuring no_std compatibility.
 Standard Spaces: sRGB, Linear RGB, Display P3, Rec. 2020, XYZ, LAB, LCH, OKLAB, OKLCH.
 Print Spaces: CMYK, SWOP, FOGRA (mapped via ICC).
@@ -26,7 +26,7 @@ pub trait ColorSpace: Copy + Clone {
     fn from_xyz(&self, xyz: [f32; 3]) -> [Self::Scalar; N];
 }
 
-Module B: tpt_color::composite (Alpha & Blending)
+Module B: tpt_colour::composite (Alpha & Blending)
 Handles how colors interact when layered. Crucial for tpt-vertex (WebGPU rendering) and tpt-doc (PDF transparency groups).
 Porter-Duff Operators: SourceOver, SourceIn, DestinationOut, Multiply, Screen, Overlay, etc.
 Premultiplied Alpha: Enforces premultiplied alpha internally to prevent dark fringing during interpolation and scaling.
@@ -38,7 +38,7 @@ pub struct PremultipliedRgba {
 
 pub fn blend_over(dst: PremultipliedRgba, src: PremultipliedRgba) -> PremultipliedRgba;
 
-Module C: tpt_color::icc (The ICC Engine)
+Module C: tpt_colour::icc (The ICC Engine)
 This is the most complex module. It replaces LittleCMS. It parses .icc files and applies the color transforms.
 Profile Parser: Safely parses ICC v2 and v4 headers, tags, and data structures.
 TRC (Tone Reproduction Curves): Handles parametric curves (Type 1-4) and table-based curves.
@@ -63,7 +63,7 @@ impl ColorTransform {
     pub fn transform_pixels(&self, pixels: &mut [[f32; 4]]);
 }
 
-Module D: tpt_color::manage (Gamut Mapping & Intents)
+Module D: tpt_colour::manage (Gamut Mapping & Intents)
 When converting from a wide gamut (e.g., OKLCH or Display P3) to a smaller gamut (e.g., sRGB), colors must be mapped.
 Rendering Intents: Perceptual, Relative Colorimetric, Saturation, Absolute Colorimetric.
 Gamut Mapping: Implements modern CSS Color Level 4 gamut mapping (using OKLCH) to smoothly clip out-of-gamut colors to the boundary of the destination space without losing perceived lightness or hue.
@@ -76,14 +76,14 @@ Execution: The ColorTransform processes the color data. If it's a single color, 
 Gamut Mapping: If the resulting color is outside the destination gamut, the OKLCH gamut mapper smoothly clips it.
 Output: Final sRGB/Linear RGB values are sent to the WebGPU renderer or PDF rasterizer.
 5. Integration with the TPT Ecosystem
-tpt-doc (PDF/OOXML): PDF/X standards require strict ICC color management for print. tpt-color will embed the target CMYK ICC profile into the PDF and convert all RGB assets to CMYK using the correct rendering intent before writing the PDF content stream.
-tpt-vertex (CAD/WebGPU): CAD models use physically based rendering (PBR). tpt-color ensures that material colors defined in linear space are correctly gamma-corrected (via TRCs) before being sent to the WebGPU shader.
-tpt-kinetix (Media): Video frames often arrive in YCbCr (Rec. 709 / Rec. 2020). tpt-color handles the YUV-to-RGB matrix math and HDR tone mapping.
+tpt-doc (PDF/OOXML): PDF/X standards require strict ICC color management for print. tpt-colour will embed the target CMYK ICC profile into the PDF and convert all RGB assets to CMYK using the correct rendering intent before writing the PDF content stream.
+tpt-vertex (CAD/WebGPU): CAD models use physically based rendering (PBR). tpt-colour ensures that material colors defined in linear space are correctly gamma-corrected (via TRCs) before being sent to the WebGPU shader.
+tpt-kinetix (Media): Video frames often arrive in YCbCr (Rec. 709 / Rec. 2020). tpt-colour handles the YUV-to-RGB matrix math and HDR tone mapping.
 tpt-simd: The ICC LUT interpolation and matrix multiplications will be the primary consumer of tpt-simd's portable abstractions.
 6. Testing & Quality Strategy
-ICC Conformance Suite: We will use the official ICC test profiles and compare tpt-color's output against LittleCMS (used only as a test oracle, not shipped in the binary) to ensure mathematical parity.
-Golden File Image Testing: Render a complex gradient mesh using tpt-color and compare the raw pixel bytes against a golden PNG.
-Fuzzing: Feed malformed, truncated, and maliciously crafted .icc files into tpt_color::icc::parse() to ensure it fails gracefully with Result::Err and never panics or leaks memory.
+ICC Conformance Suite: We will use the official ICC test profiles and compare tpt-colour's output against LittleCMS (used only as a test oracle, not shipped in the binary) to ensure mathematical parity.
+Golden File Image Testing: Render a complex gradient mesh using tpt-colour and compare the raw pixel bytes against a golden PNG.
+Fuzzing: Feed malformed, truncated, and maliciously crafted .icc files into tpt_colour::icc::parse() to ensure it fails gracefully with Result::Err and never panics or leaks memory.
 7. Roadmap & Milestones
 Phase 1: Math & Compositing (Weeks 1-2)
 Wrap palette and expose the ColorSpace traits.

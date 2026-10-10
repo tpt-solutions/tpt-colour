@@ -5,6 +5,9 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 
+[lints]
+workspace = true
+
 [features]
 default = []
 std = []
@@ -12,4 +15,4 @@ simd = []
 
 [dependencies]
 tpt-colour-core.workspace = true
-winnow.workspace = true
+libm.workspace = true

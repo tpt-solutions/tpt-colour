@@ -5,10 +5,17 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 
+[lints]
+workspace = true
+
 [features]
 default = []
 std = []
 simd = []
 
 [dependencies]
+libm.workspace = true
+
+[dev-dependencies]
+# Independent reference for cross-checking our maths in tests only.
 palette.workspace = true
