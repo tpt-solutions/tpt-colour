@@ -27,7 +27,41 @@ pub enum Trc {
     },
 }
 
+/// Samples in a baked curve. Linear interpolation over this grid is accurate to about 1e-5
+/// for the curves ICC profiles use, which is well below one 8-bit code.
+pub(crate) const BAKED_SAMPLES: usize = 4096;
+
 impl Trc {
+    /// Samples the forward curve (encoded → linear) into a table, so evaluation needs no `powf`.
+    ///
+    /// Tables and identity curves are returned unchanged.
+    #[must_use]
+    pub(crate) fn bake(&self) -> Trc {
+        match self {
+            Self::Identity | Self::Table(_) => self.clone(),
+            _ => Self::Table(
+                (0..BAKED_SAMPLES)
+                    .map(|i| self.eval(i as f32 / (BAKED_SAMPLES - 1) as f32))
+                    .collect(),
+            ),
+        }
+    }
+
+    /// Samples the inverse curve (linear → encoded) into a table over the linear domain.
+    ///
+    /// Evaluate the result with [`Trc::eval`] to get the encoded value.
+    #[must_use]
+    pub(crate) fn bake_inverse(&self) -> Trc {
+        match self {
+            Self::Identity => Self::Identity,
+            _ => Self::Table(
+                (0..BAKED_SAMPLES)
+                    .map(|i| self.eval_inverse(i as f32 / (BAKED_SAMPLES - 1) as f32))
+                    .collect(),
+            ),
+        }
+    }
+
     /// Encoded → linear. The input is clamped to `[0, 1]`.
     #[must_use]
     pub fn eval(&self, x: f32) -> f32 {

@@ -11,7 +11,7 @@ workspace = true
 [features]
 default = []
 std = []
-simd = []
+simd = ["tpt-colour-icc/simd"]
 
 [dependencies]
 tpt-colour-core.workspace = true

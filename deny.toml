@@ -42,3 +42,5 @@ deny = [
 unknown-registry = "deny"
 unknown-git = "deny"
 allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+# tpt-simd is pinned to a commit; the `simd` feature is the only user.
+allow-git = ["https://github.com/tpt-solutions/tpt-simd"]

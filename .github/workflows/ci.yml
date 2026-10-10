@@ -97,3 +97,14 @@ jobs:
       - run: cargo install cargo-fuzz --locked
       - working-directory: fuzz
         run: cargo fuzz run icc_parse -- -max_total_time=60
+
+  simd:
+    # The `simd` feature needs Rust 1.95 (tpt-simd's minimum), so it is tested on stable,
+    # not in the 1.85 MSRV job.
+    name: Tests with simd feature (stable)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test --workspace --features tpt-colour/simd

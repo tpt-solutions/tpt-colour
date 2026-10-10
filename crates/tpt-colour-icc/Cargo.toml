@@ -11,8 +11,9 @@ workspace = true
 [features]
 default = []
 std = []
-simd = []
+simd = ["dep:tpt-simd-vector"]
 
 [dependencies]
 tpt-colour-core.workspace = true
 libm.workspace = true
+tpt-simd-vector = { workspace = true, optional = true }

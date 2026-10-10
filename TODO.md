@@ -11,8 +11,8 @@ Conventions: British English everywhere (`colour`, `ColourSpace`, `tpt_colour`, 
 - [x] Add `rustfmt.toml`, clippy config, `deny.toml` (ban C-FFI/`-sys` crates in shipped crates)
 - [x] CI: build, test, clippy, `no_std` target check (e.g. `thumbv7em-none-eabihf`)
 - [x] README with British spelling and crate overview
-- [ ] Confirm licence (currently placeholder `MIT OR Apache-2.0`)
-- [ ] Decide `tpt-simd` location/API; define internal SIMD trait behind `simd` feature
+- [x] Confirm licence: dual MIT OR Apache-2.0 (`LICENSE-MIT`, `LICENSE-APACHE`; MIT copyright holder "TPT Solutions", matching tpt-simd)
+- [x] Decide `tpt-simd` location/API: git dependency on `tpt-simd-vector` (github.com/tpt-solutions/tpt-simd, pinned to `be4f4c4`), behind the `simd` feature. No internal trait
 
 ## Phase 1 – Maths & Compositing (Weeks 1–2)
 ### `tpt_colour::space`
@@ -54,7 +54,7 @@ Conventions: British English everywhere (`colour`, `ColourSpace`, `tpt_colour`, 
 - [x] n-D CLUT: tetrahedral for 3 inputs, multilinear otherwise (4-input CMYK uses multilinear)
 - [x] Rendering-intent tags (`A2B0/1/2`, `B2A0/1/2`), black point compensation
 - [x] Lab PCS encodings (v2 vs v4)
-- [ ] Optional `simd` acceleration of LUT lookups and matrix maths
+- [ ] Optional `simd` acceleration of LUT lookups and matrix maths (matrix/TRC batches done; LUT lookups not yet)
 - [x] **Milestone:** CMYK (FOGRA39 / SWOP) ⇄ Lab, ready for tpt-doc (SWOP verified against the system `RSWOP.icm`; FOGRA39 not available here, so not yet verified)
 
 ## Phase 4 – Gamut Mapping & Polish (Weeks 9–10)
@@ -67,15 +67,15 @@ Conventions: British English everywhere (`colour`, `ColourSpace`, `tpt_colour`, 
 - [ ] Publish v1.0.0 (not done: publishing is outward-facing and needs confirmation; version is still 0.1.0)
 
 ## Testing & Quality
-- [ ] Oracle crate: LittleCMS comparison against official ICC test profiles (not shipped)
-- [ ] Define parity tolerances (ΔE) against LittleCMS
-- [ ] Golden-file gradient mesh test (raw pixel bytes vs PNG, PNG decoding as dev-dependency only)
-- [ ] Fuzzing (`cargo-fuzz`) of `icc::parse()` – malformed, truncated, malicious files; no panics, no leaks
-- [ ] Cross-platform determinism test (identical bits on x86-64 / ARM / WASM)
-- [ ] Benchmarks (scalar vs `simd`)
-- [ ] `#![forbid(unsafe_code)]` where possible; audit any `unsafe`
+- [x] Oracle crate: LittleCMS comparison (LittleCMS 2.17 via Pillow generated the fixtures; profiles are read from `TPT_ICC_DIR` and not shipped). Covers system RSWOP CMYK→sRGB and gamma-1.8 RGB→sRGB, not the official ICC test set yet
+- [x] Define parity tolerances against LittleCMS: ≤ 1 8-bit code (measured worst case is 1). Expressed in codes, not ΔE
+- [x] Golden-file gradient mesh test (raw pixel bytes vs PNG, `png` is a dev-dependency only). The golden is self-generated, so it guards regressions rather than providing an independent reference
+- [x] Fuzzing (`cargo-fuzz`) of `icc::parse()`: target in `fuzz/` compiles here and runs in CI on Linux. Not run locally (libFuzzer needs Linux). A deterministic mutation test runs in the normal suite (20 000 cases)
+- [x] Cross-platform determinism test: recorded bit patterns on x86-64; ARM64 CI job added and wasm32 build checked. Only x86-64 has been run here
+- [x] Benchmarks: `examples/bench.rs` (best of 5). Baked TRC tables took the scalar matrix path from about 2 to about 17 Mpx/s. The `simd` batch is bit-identical to scalar but about 2× slower in this kernel. Plain `[f32; 8]` arrays run at scalar speed, so the overhead is in tpt-simd-vector's lane ops. Feed this back upstream
+- [x] `#![forbid(unsafe_code)]` where possible; audit any `unsafe`: `unsafe_code = forbid` at workspace level and no `unsafe` in the source
 
 ## Open Items (non-blocking, assumed defaults)
-- [ ] Minimum Rust version (set to 1.85, edition 2024)
+- [x] Minimum Rust version: 1.85 for the default build (checked). The `simd` feature needs 1.95 (tpt-simd)
 - [ ] Which ICC test profile set to use as fixtures
 - [ ] Scope of `mpet` support in v1.0

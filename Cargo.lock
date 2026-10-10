@@ -184,6 +184,7 @@ version = "0.1.0"
 dependencies = [
  "libm",
  "tpt-colour-core",
+ "tpt-simd-vector",
 ]
 
 [[package]]
@@ -194,6 +195,14 @@ dependencies = [
  "png",
  "tpt-colour-core",
  "tpt-colour-icc",
+]
+
+[[package]]
+name = "tpt-simd-vector"
+version = "0.1.0"
+source = "git+https://github.com/tpt-solutions/tpt-simd?rev=be4f4c4e9dd8fa60460dcf6aae2afadab5ccd077#be4f4c4e9dd8fa60460dcf6aae2afadab5ccd077"
+dependencies = [
+ "libm",
 ]
 
 [[package]]

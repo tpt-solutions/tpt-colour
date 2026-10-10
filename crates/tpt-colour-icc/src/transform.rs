@@ -79,8 +79,9 @@ impl Backward {
         match self {
             Self::Matrix { inverse, trc } => {
                 let lin = mul_vec(inverse, xyz);
+                // `trc` holds baked inverse curves, so `eval` gives the encoded value.
                 for ((out, t), v) in device.iter_mut().zip(trc).zip(lin) {
-                    *out = t.eval_inverse(v);
+                    *out = t.eval(v);
                 }
                 Ok(())
             }
@@ -241,6 +242,11 @@ impl ColourTransform {
         if src_n > 4 || dst_n > 4 {
             return Err(IccError::ChannelCount);
         }
+        #[cfg(feature = "simd")]
+        if let Some(parts) = self.matrix_parts() {
+            transform_pixels_matrix(parts, pixels);
+            return Ok(());
+        }
         for px in pixels {
             let mut input = [0.0_f32; 4];
             input[..src_n].copy_from_slice(&px[..src_n]);
@@ -252,12 +258,83 @@ impl ColourTransform {
     }
 }
 
+#[cfg(feature = "simd")]
+impl ColourTransform {
+    /// Matrix/TRC parts of a matrix-to-matrix transform without black point compensation.
+    fn matrix_parts(&self) -> Option<MatrixParts<'_>> {
+        match (&self.forward, &self.backward, &self.black) {
+            (
+                Forward::Matrix {
+                    colorants,
+                    trc: src_trc,
+                },
+                Backward::Matrix {
+                    inverse,
+                    trc: dst_trc,
+                },
+                None,
+            ) => Some(MatrixParts {
+                colorants,
+                src_trc,
+                inverse,
+                dst_trc,
+            }),
+            _ => None,
+        }
+    }
+}
+
+#[cfg(feature = "simd")]
+/// Batched transform for matrix/TRC pairs: eight pixels per matrix product.
+///
+/// Remainder pixels go through the scalar path, so the result is identical either way.
+fn transform_pixels_matrix(p: MatrixParts<'_>, pixels: &mut [[f32; 4]]) {
+    use crate::batch::{LANES, Lanes, mat_lanes};
+
+    let mut chunks = pixels.chunks_exact_mut(LANES);
+    for chunk in &mut chunks {
+        let mut lin = [Lanes::splat(0.0); 3];
+        for (c, lane) in lin.iter_mut().enumerate() {
+            *lane = Lanes::from_fn(|i| p.src_trc[c].eval(chunk[i][c]));
+        }
+        let xyz = mat_lanes(p.colorants, lin);
+        let dst_lin = mat_lanes(p.inverse, xyz);
+        for (c, trc) in p.dst_trc.iter().enumerate() {
+            for (i, px) in chunk.iter_mut().enumerate() {
+                px[c] = trc.eval(dst_lin[c][i]);
+            }
+        }
+    }
+    for px in chunks.into_remainder() {
+        let rgb = [
+            p.src_trc[0].eval(px[0]),
+            p.src_trc[1].eval(px[1]),
+            p.src_trc[2].eval(px[2]),
+        ];
+        let xyz = mul_vec(p.colorants, rgb);
+        let lin = mul_vec(p.inverse, xyz);
+        for c in 0..3 {
+            px[c] = p.dst_trc[c].eval(lin[c]);
+        }
+    }
+}
+
+/// Borrowed matrix/TRC parts of a transform.
+#[cfg(feature = "simd")]
+#[derive(Clone, Copy)]
+struct MatrixParts<'a> {
+    colorants: &'a Mat3,
+    src_trc: &'a [Trc; 3],
+    inverse: &'a Mat3,
+    dst_trc: &'a [Trc; 3],
+}
+
 /// Source-side pipeline or matrix for `intent`.
 fn forward(profile: &IccProfile, intent: RenderingIntent) -> Result<Forward, IccError> {
     match &profile.model {
         ProfileModel::Matrix(m) => Ok(Forward::Matrix {
             colorants: m.colorants,
-            trc: m.trc.clone(),
+            trc: m.trc.clone().map(|t| t.bake()),
         }),
         ProfileModel::Lut(tables) => {
             let pipeline = tables.a2b(intent).ok_or(IccError::Unsupported)?.clone();
@@ -279,7 +356,7 @@ fn backward(profile: &IccProfile, intent: RenderingIntent) -> Result<Backward, I
     match &profile.model {
         ProfileModel::Matrix(m) => Ok(Backward::Matrix {
             inverse: inverse(&m.colorants)?,
-            trc: m.trc.clone(),
+            trc: m.trc.clone().map(|t| t.bake_inverse()),
         }),
         ProfileModel::Lut(tables) => {
             let pipeline = tables.b2a(intent).ok_or(IccError::Unsupported)?.clone();

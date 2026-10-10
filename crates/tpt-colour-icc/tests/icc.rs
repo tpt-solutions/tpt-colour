@@ -124,8 +124,11 @@ fn milestone_srgb_to_display_p3() {
     let fwd = ColourTransform::new(&srgb, &p3, RenderingIntent::Perceptual).unwrap();
     let back = ColourTransform::new(&p3, &srgb, RenderingIntent::Perceptual).unwrap();
     for c in SAMPLES {
-        let expected = DisplayP3.from_xyz(SRgb.to_xyz(c));
-        assert_near(fwd.rgb(c), expected, 1e-3);
+        // Device output is clipped to [0, 1], so clip the reference too.
+        let expected = DisplayP3
+            .from_xyz(SRgb.to_xyz(c))
+            .map(|v| v.clamp(0.0, 1.0));
+        assert_near(fwd.rgb(c), expected, 2e-5);
         let round = back.rgb(fwd.rgb(c));
         assert_near(round, c, 1e-3);
     }

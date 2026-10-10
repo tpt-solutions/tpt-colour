@@ -7,9 +7,9 @@ use tpt_colour_manage::ColourManager;
 
 /// Inputs and the expected `f32` bit patterns of the outputs, for Display P3 → sRGB (perceptual).
 const CASES: [([f32; 3], [u32; 3]); 4] = [
-    ([1.0, 0.0, 0.0], [0x3F7F_FFFD, 0x3D2D_5A27, 0x3D36_B58C]),
-    ([0.0, 1.0, 0.0], [0x0000_0000, 0x3F7C_5B57, 0x3E23_5E31]),
-    ([0.5, 0.5, 0.5], [0x3EFF_FB2C, 0x3F00_005A, 0x3F00_03A4]),
+    ([1.0, 0.0, 0.0], [0x3F7F_FFFD, 0x3D2D_495D, 0x3D36_ABA2]),
+    ([0.0, 1.0, 0.0], [0x0000_0000, 0x3F7C_5B58, 0x3E23_5DFD]),
+    ([0.5, 0.5, 0.5], [0x3EFF_FB2D, 0x3F00_005B, 0x3F00_03A4]),
     ([0.2, 0.7, 0.9], [0x0000_0000, 0x3F36_0337, 0x3F6A_20E2]),
 ];
 
@@ -22,7 +22,7 @@ fn transforms_are_bit_identical_to_recorded_values() {
     for (input, expected) in CASES {
         let out = t.transform_rgb(input).unwrap();
         let bits = out.map(f32::to_bits);
-        println!("{input:?} → {out:?} bits {:08X?}", bits);
+        println!("{input:?} → {out:?} bits {bits:08X?}");
         assert_eq!(bits, expected, "input {input:?}: {out:?}");
     }
 }

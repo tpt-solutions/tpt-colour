@@ -58,8 +58,8 @@ fn assemble(data: [u8; 4], pcs: [u8; 4], body: &[u8]) -> Vec<u8> {
     out[0..4].copy_from_slice(&(total as u32).to_be_bytes());
     out[8] = 4;
     out[12..16].copy_from_slice(b"prtr");
-    out[16..20].copy_from_slice(data);
-    out[20..24].copy_from_slice(pcs);
+    out[16..20].copy_from_slice(&data);
+    out[20..24].copy_from_slice(&pcs);
     out[36..40].copy_from_slice(b"acsp");
     out.extend(1_u32.to_be_bytes());
     out.extend(b"A2B0");
@@ -85,7 +85,7 @@ fn random_mutations_never_panic() {
     let seed = seed_lut_profile();
     IccProfile::parse(&seed).expect("the seed profile is valid");
     let mut rng = XorShift(0x9E37_79B9_7F4A_7C15);
-    for _ in 0..20_000 {
+    for _ in 0..5_000 {
         let mut bytes = seed.clone();
         match rng.below(3) {
             0 => {

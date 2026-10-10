@@ -3,8 +3,10 @@
 A pure-Rust colour management substrate: colour spaces and maths, alpha
 compositing, ICC profile parsing and transforms, and gamut mapping.
 
-It is `no_std` throughout (the ICC crate also needs `alloc`). SIMD acceleration
-is optional behind the `simd` feature; the scalar path is the reference.
+It is `no_std` throughout (the ICC crate also needs `alloc`). The scalar path is the reference.
+SIMD batching is optional behind the `simd` feature, which uses
+[`tpt-simd`](https://github.com/tpt-solutions/tpt-simd) (pinned to a commit). It produces
+bit-identical output and needs Rust 1.95; the default build keeps the 1.85 MSRV.
 
 ## Crates
 
@@ -49,10 +51,11 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 cargo check --workspace --target thumbv7em-none-eabihf   # no_std check
 cargo deny check
+cargo test --workspace --features tpt-colour/simd   # needs Rust 1.95
 ```
 
 The design is in [spec.txt](spec.txt) and the work plan in [TODO.md](TODO.md).
 
 ## Licence
 
-Placeholder: `MIT OR Apache-2.0`. Pending confirmation; licence files are not yet added.
+Licensed under either of [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE), at your option.

@@ -7,6 +7,8 @@
 #![no_std]
 extern crate alloc;
 
+#[cfg(feature = "simd")]
+mod batch;
 mod bytes;
 mod error;
 mod lut;

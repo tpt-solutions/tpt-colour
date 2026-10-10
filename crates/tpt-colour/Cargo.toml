@@ -8,7 +8,7 @@ license.workspace = true
 [features]
 default = []
 std = []
-simd = []
+simd = ["tpt-colour-manage/simd"]
 
 [dependencies]
 tpt-colour-core.workspace = true
