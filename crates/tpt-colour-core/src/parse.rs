@@ -1,6 +1,7 @@
 //! Parsing of CSS colour syntax: any of the forms below, through [`parse_colour`].
 //!
-//! Hex colours are parsed by [`crate::hex`]. Named colours are in [`crate::named`].
+//! Hex colours are parsed by [`crate::hex`]. Named colours are looked up in a private table of
+//! the 148 CSS names, through [`named_colour`].
 
 use crate::hex::parse_hex;
 use crate::space::{ColourSpace, Oklch, SRgb};

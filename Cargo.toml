@@ -6,9 +6,12 @@ members = [
     "crates/tpt-colour-manage",
     "crates/tpt-colour",
     "crates/tpt-colour-cli",
+    "crates/tpt-colour-wasm",
 ]
-# The oracle crate links LittleCMS (C) for tests only and is never shipped.
-exclude = ["crates/tpt-colour-oracle"]
+# The oracle crate links LittleCMS (C) for tests only and is never shipped. The Python and C
+# bindings are built separately (maturin, cbindgen): PyO3 and the C ABI need their own lint and
+# link setup, so they stay out of the default workspace build.
+exclude = ["crates/tpt-colour-oracle", "crates/tpt-colour-py", "crates/tpt-colour-capi"]
 
 [workspace.package]
 version = "0.1.0"
@@ -38,5 +41,7 @@ tpt-colour-icc = { path = "crates/tpt-colour-icc", version = "0.1.0", default-fe
 tpt-colour-manage = { path = "crates/tpt-colour-manage", version = "0.1.0", default-features = false }
 palette = { version = "0.7", default-features = false, features = ["libm"] }
 libm = { version = "0.2", default-features = false }
+# Optional, behind each crate's `serde` feature. Derives only; no runtime codec.
+serde = { version = "1", default-features = false, features = ["derive", "alloc"] }
 # Optional SIMD backend (feature `simd`). Pinned to a verified commit: tpt-simd has no releases yet.
 tpt-simd-vector = { git = "https://github.com/tpt-solutions/tpt-simd", rev = "be4f4c4e9dd8fa60460dcf6aae2afadab5ccd077", default-features = false }

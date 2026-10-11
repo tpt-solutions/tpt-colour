@@ -1,0 +1,22 @@
+[package]
+name = "tpt-colour-wasm"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "WebAssembly (wasm-bindgen) bindings for tpt-colour"
+repository.workspace = true
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[lints]
+workspace = true
+
+[dependencies]
+tpt-colour = { path = "../tpt-colour", version = "0.1.0" }
+wasm-bindgen = "0.2"
+
+[dev-dependencies]
+wasm-bindgen-test = "0.3"

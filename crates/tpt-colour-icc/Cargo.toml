@@ -18,9 +18,11 @@ workspace = true
 
 [features]
 default = []
+serde = ["dep:serde"]
 simd = ["dep:tpt-simd-vector"]
 
 [dependencies]
+serde = { workspace = true, optional = true }
 tpt-colour-core.workspace = true
 libm.workspace = true
 tpt-simd-vector = { workspace = true, optional = true }

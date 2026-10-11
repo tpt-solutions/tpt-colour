@@ -1,0 +1,370 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>tpt-colour playground</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #f6f6f4;
+    --panel: #ffffff;
+    --ink: #1d1d1b;
+    --muted: #5d5d58;
+    --line: #d9d9d3;
+    --accent: #1f6feb;
+    --bad: #b42318;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #151514;
+      --panel: #1f1f1d;
+      --ink: #efefea;
+      --muted: #a3a39c;
+      --line: #3a3a36;
+      --accent: #6aa7ff;
+      --bad: #ff8a80;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #151514;
+    --panel: #1f1f1d;
+    --ink: #efefea;
+    --muted: #a3a39c;
+    --line: #3a3a36;
+    --accent: #6aa7ff;
+    --bad: #ff8a80;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  main { max-width: 56rem; margin: 0 auto; padding: 1.5rem 1rem 3rem; }
+  h1 { font-size: 1.6rem; margin: 0 0 0.25rem; }
+  h2 { font-size: 1.1rem; margin: 0 0 0.75rem; }
+  p.lead { color: var(--muted); margin: 0 0 1.5rem; }
+  section {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 1rem 1.25rem;
+    margin-bottom: 1rem;
+  }
+  label { display: block; font-size: 0.9rem; color: var(--muted); margin-bottom: 0.25rem; }
+  input[type="text"], select {
+    width: 100%;
+    font: inherit;
+    padding: 0.45rem 0.6rem;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: var(--bg);
+    color: var(--ink);
+  }
+  input[type="color"] { width: 3.2rem; height: 2.2rem; border: none; background: none; padding: 0; }
+  .row { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: end; margin-bottom: 0.75rem; }
+  .row > * { flex: 1 1 10rem; }
+  .row > .narrow { flex: 0 0 auto; }
+  .swatch {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.3rem;
+    font-size: 0.8rem;
+    color: var(--muted);
+  }
+  .swatch span.chip {
+    width: 5.5rem;
+    height: 3.5rem;
+    border-radius: 8px;
+    border: 1px solid var(--line);
+  }
+  .swatches { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-top: 0.75rem; }
+  .sample {
+    padding: 0.75rem 1rem;
+    border-radius: 8px;
+    border: 1px solid var(--line);
+    margin-top: 0.75rem;
+    font-size: 1.1rem;
+  }
+  output { font-variant-numeric: tabular-nums; }
+  .error { color: var(--bad); min-height: 1.2em; font-size: 0.9rem; }
+  code { font-family: ui-monospace, Consolas, monospace; font-size: 0.9em; }
+  button {
+    font: inherit;
+    padding: 0.45rem 0.9rem;
+    border-radius: 6px;
+    border: 1px solid var(--accent);
+    background: var(--accent);
+    color: #fff;
+    cursor: pointer;
+  }
+  button.ghost { background: none; color: var(--accent); }
+  #status { color: var(--muted); font-size: 0.9rem; }
+  @media (max-width: 480px) { main { padding: 1rem 0.75rem 2rem; } section { padding: 0.9rem; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>tpt-colour playground</h1>
+  <p class="lead">Parsing, contrast, colour-vision simulation, harmonies and ICC conversion, running
+    in your browser from the <code>tpt-colour-wasm</code> crate. Nothing you enter leaves the page.</p>
+  <p id="status">Loading the WebAssembly module…</p>
+
+  <section>
+    <h2>Parse a CSS colour</h2>
+    <div class="row">
+      <div>
+        <label for="css">Colour</label>
+        <input id="css" type="text" value="oklch(62.8% 0.2577 29.23)" spellcheck="false">
+      </div>
+    </div>
+    <div class="error" id="css-error"></div>
+    <output id="css-out"></output>
+    <div class="sample" id="css-sample">Sample text</div>
+  </section>
+
+  <section>
+    <h2>Contrast</h2>
+    <div class="row">
+      <div class="narrow">
+        <label for="text-colour">Text</label>
+        <input id="text-colour" type="color" value="#1d1d1b">
+      </div>
+      <div class="narrow">
+        <label for="bg-colour">Background</label>
+        <input id="bg-colour" type="color" value="#f6f6f4">
+      </div>
+    </div>
+    <output id="contrast-out"></output>
+  </section>
+
+  <section>
+    <h2>Colour-vision simulation</h2>
+    <div class="row">
+      <div class="narrow">
+        <label for="vision-colour">Colour</label>
+        <input id="vision-colour" type="color" value="#e0492d">
+      </div>
+    </div>
+    <div class="swatches" id="vision-out"></div>
+  </section>
+
+  <section>
+    <h2>Harmonies</h2>
+    <div class="row">
+      <div>
+        <label for="harmony-colour">Base colour</label>
+        <input id="harmony-colour" type="color" value="#2d7de0">
+      </div>
+      <div>
+        <label for="harmony-kind">Harmony</label>
+        <select id="harmony-kind">
+          <option value="complement">Complement</option>
+          <option value="analogous">Analogous</option>
+          <option value="triadic">Triadic</option>
+          <option value="split-complementary">Split complementary</option>
+        </select>
+      </div>
+    </div>
+    <div class="swatches" id="harmony-out"></div>
+  </section>
+
+  <section>
+    <h2>Profile conversion</h2>
+    <div class="row">
+      <div>
+        <label for="src-profile">From</label>
+        <select id="src-profile"></select>
+      </div>
+      <div>
+        <label for="dst-profile">To</label>
+        <select id="dst-profile"></select>
+      </div>
+      <div>
+        <label for="intent">Intent</label>
+        <select id="intent">
+          <option value="perceptual">Perceptual</option>
+          <option value="relative">Relative colorimetric</option>
+          <option value="saturation">Saturation</option>
+          <option value="absolute">Absolute colorimetric</option>
+        </select>
+      </div>
+    </div>
+    <div class="row">
+      <div class="narrow">
+        <label for="profile-colour">Colour</label>
+        <input id="profile-colour" type="color" value="#e0492d">
+      </div>
+      <div>
+        <label for="icc-file">Load an ICC profile (kept in this tab only)</label>
+        <input id="icc-file" type="file" accept=".icc,.icm">
+      </div>
+      <div class="narrow">
+        <button class="ghost" id="icc-clear" type="button">Remove custom</button>
+      </div>
+    </div>
+    <div class="error" id="icc-error"></div>
+    <output id="profile-out"></output>
+  </section>
+</main>
+
+<script type="module">
+  import init, {
+    parseColour, wcagContrast, apcaContrast, simulateDeficiency, harmony, Manager,
+  } from "./pkg/tpt_colour_wasm.js";
+
+  const $ = (id) => document.getElementById(id);
+  const hexToRgb = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
+  // Typed arrays from wasm: copy to plain arrays first, since mapping a Float32Array back into
+  // strings would coerce them to numbers.
+  const rgbToHex = (rgb) =>
+    "#" + Array.from(rgb, (v) => Math.round(Math.min(1, Math.max(0, v)) * 255).toString(16).padStart(2, "0")).join("");
+  const fmt = (v) => v.toFixed(2);
+
+  function swatch(label, rgb) {
+    const el = document.createElement("div");
+    el.className = "swatch";
+    el.innerHTML = `<span class="chip"></span><span></span>`;
+    el.firstChild.style.background = rgbToHex(rgb);
+    el.lastChild.textContent = `${label} ${rgbToHex(rgb)}`;
+    return el;
+  }
+
+  function fill(out, items) {
+    out.replaceChildren(...items.map(([label, rgb]) => swatch(label, rgb)));
+  }
+
+  function showCss() {
+    const err = $("css-error");
+    const out = $("css-out");
+    try {
+      const [r, g, b, a] = parseColour($("css").value.trim());
+      err.textContent = "";
+      out.textContent = `8-bit rgba(${r}, ${g}, ${b}, ${a})  ·  ${rgbToHex([r / 255, g / 255, b / 255])}`;
+      const sample = $("css-sample");
+      sample.style.background = `rgba(${r}, ${g}, ${b}, ${a / 255})`;
+      sample.style.color = wcagContrast([r / 255, g / 255, b / 255], [0, 0, 0]) > 4.5 ? "#000" : "#fff";
+    } catch (e) {
+      out.textContent = "";
+      err.textContent = e.message;
+    }
+  }
+
+  function showContrast() {
+    const text = hexToRgb($("text-colour").value);
+    const bg = hexToRgb($("bg-colour").value);
+    const wcag = wcagContrast(text, bg);
+    const lc = apcaContrast(text, bg);
+    const aa = wcag >= 4.5 ? "passes" : "fails";
+    $("contrast-out").textContent =
+      `WCAG 2 ${wcag.toFixed(2)}:1 (${aa} AA body text)  ·  APCA Lc ${lc.toFixed(1)}`;
+  }
+
+  function showVision() {
+    const rgb = hexToRgb($("vision-colour").value);
+    fill($("vision-out"), [
+      ["Normal", rgb],
+      ["Protanopia", simulateDeficiency(rgb, "protanopia")],
+      ["Deuteranopia", simulateDeficiency(rgb, "deuteranopia")],
+      ["Tritanopia", simulateDeficiency(rgb, "tritanopia")],
+    ]);
+  }
+
+  function showHarmony() {
+    const base = hexToRgb($("harmony-colour").value);
+    const kind = $("harmony-kind").value;
+    const flat = harmony(base, kind);
+    const items = [["Base", base]];
+    for (let i = 0; i < flat.length; i += 3) items.push([`${i / 3 + 1}`, flat.slice(i, i + 3)]);
+    fill($("harmony-out"), items);
+  }
+
+  let manager = null;
+  let custom = null;
+
+  function profileNames() {
+    const names = ["srgb", "display-p3"];
+    if (custom) names.push(custom);
+    return names;
+  }
+
+  function fillProfileSelects() {
+    for (const id of ["src-profile", "dst-profile"]) {
+      const select = $(id);
+      const keep = select.value;
+      select.replaceChildren(...profileNames().map((n) => new Option(n, n)));
+      if (profileNames().includes(keep)) select.value = keep;
+    }
+    if (!$("src-profile").value || $("src-profile").value === $("dst-profile").value) {
+      $("dst-profile").value = $("src-profile").value === "srgb" ? "display-p3" : "srgb";
+    }
+  }
+
+  function showProfile() {
+    const out = $("profile-out");
+    try {
+      const rgb = hexToRgb($("profile-colour").value);
+      const converted = Array.from(manager.transformRgb(
+        $("src-profile").value, $("dst-profile").value, $("intent").value, rgb,
+      ));
+      out.textContent = `${$("src-profile").value} → ${$("dst-profile").value}: ` +
+        `${converted.map(fmt).join(", ")}  (${rgbToHex(converted)})`;
+    } catch (e) {
+      out.textContent = e.message;
+    }
+  }
+
+  async function loadIcc(file) {
+    const err = $("icc-error");
+    try {
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      const name = "custom";
+      manager.registerIcc(name, bytes);
+      custom = name;
+      err.textContent = "";
+      fillProfileSelects();
+      $("dst-profile").value = name;
+      $("src-profile").value = "srgb";
+      showProfile();
+    } catch (e) {
+      err.textContent = `Could not read that profile: ${e.message}`;
+    }
+  }
+
+  async function start() {
+    await init();
+    manager = new Manager();
+    fillProfileSelects();
+
+    for (const id of ["css"]) $(id).addEventListener("input", showCss);
+    for (const id of ["text-colour", "bg-colour"]) $(id).addEventListener("input", showContrast);
+    $("vision-colour").addEventListener("input", showVision);
+    for (const id of ["harmony-colour", "harmony-kind"]) $(id).addEventListener("input", showHarmony);
+    for (const id of ["profile-colour", "src-profile", "dst-profile", "intent"]) {
+      $(id).addEventListener("input", showProfile);
+    }
+    $("icc-file").addEventListener("change", (e) => e.target.files[0] && loadIcc(e.target.files[0]));
+    $("icc-clear").addEventListener("click", () => {
+      custom = null;
+      fillProfileSelects();
+      $("icc-error").textContent = "";
+      showProfile();
+    });
+
+    showCss();
+    showContrast();
+    showVision();
+    showHarmony();
+    showProfile();
+    $("status").textContent = "Ready. The page works offline once loaded.";
+  }
+
+  start().catch((e) => {
+    $("status").textContent = `Could not load the WebAssembly module: ${e.message}`;
+  });
+</script>
+</body>
+</html>

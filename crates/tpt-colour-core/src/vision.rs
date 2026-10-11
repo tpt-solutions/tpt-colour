@@ -9,6 +9,7 @@ use crate::space::{srgb_eotf, srgb_oetf};
 /// A dichromatic colour-vision deficiency.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[non_exhaustive]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Deficiency {
     /// Missing long-wavelength (L) cones.
     Protanopia,

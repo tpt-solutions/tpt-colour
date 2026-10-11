@@ -99,6 +99,7 @@ name = "tpt-colour-fuzz"
 version = "0.0.0"
 dependencies = [
  "libfuzzer-sys",
+ "tpt-colour-core",
  "tpt-colour-icc",
 ]
 

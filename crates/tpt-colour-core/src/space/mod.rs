@@ -3,22 +3,26 @@
 //! All XYZ values are relative to the D65 white point with `Y = 1` for white,
 //! unless a type documents otherwise.
 
+mod acescg;
 mod adapt;
 mod cmyk;
+mod hdr;
 mod lab;
 mod luv;
 mod rgb;
 mod ycbcr;
 mod ycocg;
 
-pub use adapt::{d50_to_d65, d65_to_d50};
+pub use acescg::AcesCg;
+pub use adapt::{ChromaticAdaptation, adaptation_matrix, d50_to_d65, d65_to_d50};
 pub use cmyk::Cmyk;
-pub use lab::{Lab, Lch, Oklab, Oklch};
+pub use hdr::{ictcp_to_xyz, jzazbz_to_xyz, xyz_to_ictcp, xyz_to_jzazbz};
+pub use lab::{Lab, Lab50, Lch, Oklab, Oklch};
 pub use luv::Luv;
-pub use rgb::{AdobeRgb, DisplayP3, LinearSRgb, ProPhotoRgb, Rec2020, SRgb};
+pub use rgb::{AdobeRgb, DisplayP3, LinearSRgb, ProPhotoRgb, Rec2020, SRgb, ScRgb};
 pub(crate) use rgb::{srgb_eotf, srgb_oetf};
 pub use ycbcr::YCbCr;
-pub use ycocg::{ycocg_decode, ycocg_encode};
+pub use ycocg::{ycocg_decode, ycocg_encode, ycocg_r_decode, ycocg_r_encode};
 
 /// D65 reference white (relative XYZ, `Y = 1`).
 pub const D65: [f32; 3] = [0.950_47, 1.0, 1.088_83];

@@ -1,0 +1,13 @@
+[book]
+title = "tpt-colour guide"
+authors = ["TPT Solutions"]
+language = "en"
+src = "src"
+
+[build]
+build-dir = "../../target/book"
+
+[output.html]
+git-repository-url = "https://github.com/tpt-solutions/tpt-colour"
+edit-url-template = "https://github.com/tpt-solutions/tpt-colour/edit/master/docs/book/{path}"
+additional-css = []

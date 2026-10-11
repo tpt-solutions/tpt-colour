@@ -1,0 +1,21 @@
+[package]
+name = "tpt-colour-py"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "MIT OR Apache-2.0"
+description = "Python bindings (PyO3) for tpt-colour"
+repository = "https://github.com/tpt-solutions/tpt-colour"
+publish = false
+
+# Built with maturin, not as part of the workspace: PyO3 links against the Python interpreter.
+# Build a wheel with `maturin build --release` from this directory.
+[workspace]
+
+[lib]
+name = "tpt_colour"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+tpt = { package = "tpt-colour", path = "../tpt-colour", version = "0.1.0" }
+pyo3 = { version = "0.25", features = ["extension-module", "abi3-py39"] }

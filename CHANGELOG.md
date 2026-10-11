@@ -28,8 +28,25 @@ appear in minor releases until 1.0.0.
 - `ColourTransform::describe()` and `tpt_colour_icc::Step`: the transform's stage graph.
 - `ColourTransform::transform_u16`, `transform_u8_image` and `transform_u16_image`. The image forms take a row stride and leave padding untouched. New error `IccError::BufferLayout`.
 
+- `IccProfile::to_bytes`: writes matrix/TRC RGB and grey profiles (ICC v2.1, XYZ PCS). A written
+  profile parses back and matches LittleCMS 2.19 exactly on the three profiles checked.
+- `check_profile_id`, `computed_profile_id` and `ProfileIdCheck`: the ICC profile ID (MD5 with three
+  header fields zeroed), checked against real profiles.
+- `ColourManager::with_capacity`: a cache cap with least-recently-used eviction.
+- `ChromaticAdaptation` and `adaptation_matrix`: Bradford, CAT02 and CAT16 between any two whites.
+- `AcesCg` (ACEScg), `Lab50` (CIE L\*a\*b\* with a D50 white), `ScRgb` (an alias of `LinearSRgb`).
+- `xyz_to_ictcp`, `ictcp_to_xyz`, `xyz_to_jzazbz`, `jzazbz_to_xyz`: HDR spaces that take XYZ in cd/m².
+- `ycocg_r_encode` and `ycocg_r_decode`: YCoCg-R, exact on every 8-bit colour.
+- Optional `serde` feature on the core, ICC and manage crates, and on the facade. It is off by default.
+- Bindings, not published: `tpt-colour-wasm` (wasm-bindgen), `tpt-colour-py` (PyO3) and
+  `tpt-colour-capi` (a C ABI with a cbindgen header).
+- A WebAssembly playground in `playground/`, and an mdBook guide in `docs/book`.
+- A `cargo-generate` starter template in `templates/starter`.
+
 ### Changed (breaking)
 
+- A `para` curve of function type 0 (`x^g`) is read as `Trc::Gamma`, not `Trc::Parametric`, so its
+  inverse is analytic. The colour results agree to within the existing tolerances.
 - `tpt_colour_core::space::YCbCr` fields are private. Use `YCbCr::new` (validated, returns
   `Option`) and the `kr()` and `kb()` getters.
 - `tpt_colour_manage::Gamut::from_space` returns `Result`. The built-in `srgb()`,

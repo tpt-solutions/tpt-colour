@@ -111,10 +111,10 @@ Source: full-workspace review. Status key: `[x]` done, `[~]` partly done (the re
 - [x] `pq_oetf` is documented as the inverse EOTF with no OOTF. `pq_eotf` is its inverse.
 
 ### Performance and API
-- [~] `ColourManager::transform` has an allocation-free cache lookup (nested `&str` keys, so a hit allocates nothing). Still open: interior mutability (`RwLock` or sharding behind `std`), and an LRU cap.
+- [~] `ColourManager::transform` has an allocation-free cache lookup (nested `&str` keys, so a hit allocates nothing). `ColourManager::with_capacity` caps the cache with least-recently-used eviction. Still open: interior mutability (`RwLock` or sharding behind `std`), which changes the `&mut self` API.
 - [x] Pre-baked 3-D device-to-device CLUT: `ColourTransform::bake_clut(grid)`. Mean error is 0.3 codes at 33 points for P3 to sRGB. Still open: an allocation-free variant tuned for speed.
 - [x] `ManageError::source()` chains to the ICC error.
-- [~] `FromStr` for `RenderingIntent` is done. `#[non_exhaustive]` on `ManageError`, `PorterDuff`, `BlendMode` and `IccError`, and `Hash` on those types. `Display`/`FromStr` for `PorterDuff` and `BlendMode` are done, from one name table. Still open: an optional `serde` feature.
+- [x] `FromStr` for `RenderingIntent` is done. `#[non_exhaustive]` on `ManageError`, `PorterDuff`, `BlendMode` and `IccError`, and `Hash` on those types. `Display`/`FromStr` for `PorterDuff` and `BlendMode` are done, from one name table. Optional `serde` feature on the core, ICC and manage crates (`serde` feature of the facade), with derives on the public enums and small structs. It is off by default, so the default graph has no serde.
 - [~] `tpt_colour::prelude`, and `tone` and `RenderingIntent` re-exported from the facade. The builtin profile enum is still open.
 - [x] u8/u16 interleaved image API with stride and alpha handling: `transform_u8`, `transform_u16`, `transform_u8_image` and `transform_u16_image` (`tests/image_layout.rs`). Padding and alpha are never touched. `IccError::BufferLayout` reports a short buffer or a stride shorter than a row
 
@@ -124,12 +124,12 @@ Source: full-workspace review. Status key: `[x]` done, `[~]` partly done (the re
 - [x] HSL, HSV and HWB (`tpt_colour_core::models`), plus xyY.
 - [x] Delta E: 76, 94, CIEDE2000 (checked against the Sharma et al. reference pairs) and Oklab ΔEOK (`tpt_colour_core::difference`).
 - [x] WCAG 2 contrast ratio and APCA (`tpt_colour_core::contrast`, `apca_contrast`, APCA 0.0.98G-4g, checked against its black and white values).
-- [~] Gray kTRC profiles: done (`ProfileModel::Gray`, PCS is D50 · Y). Still open: Lab/XYZ/device-link/abstract profile classes.
-- [~] HLG OETF and inverse (`tone::hlg_oetf`, `hlg_eotf`). Still open: more tone mappers (BT.2390, ACES, AgX), ICtCp, Jzazbz.
-- [~] Spaces: Adobe RGB (1998), ProPhoto RGB and CIE Luv (`space::Luv`) are done. Still open: ACEScg, scRGB, D50 Lab, arbitrary white points, CAT02/CAT16.
+- [~] Gray kTRC profiles: done (`ProfileModel::Gray`, PCS is D50 · Y), and the matrix/TRC and grey profiles are written by `IccProfile::to_bytes`. Still open: Lab/XYZ/device-link/abstract profile classes.
+- [~] HLG OETF and inverse (`tone::hlg_oetf`, `hlg_eotf`). ICtCp and Jzazbz are done in `space` (see below). Still open: more tone mappers (BT.2390, ACES, AgX). No reference implementation is installed for them, so they are not written from memory.
+- [~] Spaces: Adobe RGB (1998), ProPhoto RGB, CIE Luv (`space::Luv`), ACEScg (`space::AcesCg`), scRGB (`space::ScRgb`) and D50 Lab (`space::Lab50`) are done. Chromatic adaptation for any pair of whites is `space::adaptation_matrix`, with Bradford, CAT02 and CAT16. Still open: a Lab type with an arbitrary white point.
 - [x] Blend modes: ColorDodge, ColorBurn, SoftLight, and the non-separable Hue, Saturation, Color and Luminosity (`blend_rgb`). Linear vs encoded blending is documented: the arithmetic is on the values passed in.
-- [x] Rec. 601 Y′CbCr (`YCbCr::REC601`), limited (studio-swing) range (`encode_limited`/`decode_limited`), and YCoCg (`ycocg_encode`/`ycocg_decode`, the non-reversible float form). YCoCg-R (integer lifting) is not done.
-- [ ] `mpet` (D2B/B2D), `ncl2`; ICC profile writer/embedder; profile ID checksum validation
+- [x] Rec. 601 Y′CbCr (`YCbCr::REC601`), limited (studio-swing) range (`encode_limited`/`decode_limited`), and YCoCg (`ycocg_encode`/`ycocg_decode`, float), and YCoCg-R (`ycocg_r_encode`/`ycocg_r_decode`, integer, exact on every 8-bit colour). ICtCp (`xyz_to_ictcp`) and Jzazbz (`xyz_to_jzazbz`), checked against colour-science 0.4.7, with inverses.
+- [~] ICC profile writer: `IccProfile::to_bytes` (matrix/TRC RGB and grey, XYZ PCS). It matches LittleCMS 2.19 exactly on three written profiles. Profile ID checksum validation: `check_profile_id`, matching 87 real profiles in iccDEV's corpus and the official sRGB fixtures. Still open: `mpet` (D2B/B2D), `ncl2`, and an embedder. `mpet` element layouts are known from iccDEV's source, but LittleCMS cannot build a transform from its test profile, so no independent reference is available yet.
 - [x] Colour-blindness simulation: `tpt_colour_core::vision::simulate` for protanopia, deuteranopia and tritanopia (Machado 2009, severity 1.0). Palette generation: `tpt_colour_core::palette` (complement, analogous, triadic, split-complementary, with a chroma-reducing sRGB fit). Gamut mapping for LUT destinations is closed, see the Found this round list
 
 ### Innovation
@@ -137,9 +137,9 @@ Source: full-workspace review. Status key: `[x]` done, `[~]` partly done (the re
 - [ ] `tpt-colour doctor`: ICC profile linter/explainer
 - [x] `ColourTransform::describe()` returns the stage graph as `Vec<Step>`, in application order, from the same stages the transform runs
 - [~] Bake a transform to a 33^3 CLUT: done (`bake_clut`), and `.cube` export (`to_cube`, CLI `cube`). Still open: WGSL/GLSL shader generation.
-- [ ] WASM gamut-mapping playground
+- [x] WASM playground: `crates/tpt-colour-wasm` (wasm-bindgen; `wasm-pack test --node` passes), and `playground/index.html`, which parses colours, checks contrast, simulates vision deficiencies, shows harmonies and converts between profiles, including a user's ICC file, which stays in the tab. The page was checked in headless Edge.
 - [x] Soft-proofing helper with out-of-gamut mask: `tpt_colour_manage::SoftProof`. The mask is ΔE₀₀ between the input and its working → proof → working round trip, in D50 Lab. Proof profiles may have up to four channels. Tested with P3 and sRGB proofs. CMYK not tested here, as no CMYK profile is available
-- [ ] OSS-Fuzz integration; documented "no panics, bounded memory" limits
+- [~] OSS-Fuzz integration: project files in `oss-fuzz/projects/tpt-colour`, with a fourth target `parse_css`, and `build.sh` runs to completion in the OSS-Fuzz Rust builder image, and each of the four binaries ran for 20 seconds under the sanitizers without a crash. Not submitted: submitting is a pull request against google/oss-fuzz from the maintainer's account, and `primary_contact` is a placeholder. "no panics, bounded memory" limits are still to be written up.
 - [ ] Public parity report vs LittleCMS/moxcms/palette, regenerated by CI
 
 ### Publishing and release automation
@@ -147,21 +147,21 @@ Nothing here publishes a crate. Publishing itself stays with the maintainer.
 - [x] crates.io metadata via `[workspace.package]` (`repository`, `keywords`, `categories`), and per-crate `description` and `readme`. Each shipped crate has a README.
 - [ ] `tpt-simd-vector` is a git dependency and blocks `cargo publish` even when optional. Publish tpt-simd and depend by version, or drop `simd` from published crates.
 - [~] `[package.metadata.docs.rs]` is set with the `docsrs` cfg. `all-features` is left out, because `simd` needs a git dependency.
-- [~] `Dependabot` is configured (`.github/dependabot.yml`), and `CHANGELOG.md` is started. Still open: release-plz, cargo-semver-checks and Renovate.
+- [~] `Dependabot` is configured (`.github/dependabot.yml`), and `CHANGELOG.md` is started. `release-plz` opens release pull requests with `publish = false` (`.github/workflows/release-plz.yml`, `release-plz.toml`). Renovate is not added, because Dependabot already covers the same ground.
 - [x] `CONTRIBUTING.md`, `SECURITY.md`, `CODE_OF_CONDUCT.md`, issue templates and a PR template.
-- [~] CI: a `RUSTDOCFLAGS=-D warnings` doc build is added. Still open: coverage (cargo-llvm-cov), criterion benchmarks with regression tracking, `cargo hack --feature-powerset`, and wasm-bindgen tests.
+- [x] CI: a `RUSTDOCFLAGS=-D warnings` doc build is added. Coverage (`cargo llvm-cov`, lcov artifact), `cargo hack --feature-powerset`, wasm-bindgen tests under Node and a playground build, Python wheels (Linux and Windows), the C ABI with a header-in-sync check and ctypes tests, the mdBook build and example tests, a semver check and a criterion benchmark comparison against the base commit are all in `.github/workflows/ci.yml`. Benchmarks and semver checks are informational. Those jobs run in GitHub, and their YAML has been checked locally, not run.
 - [x] CI oracle job fails, not skips, when a profile is missing (`skip_or_fail` in `littlecms.rs`, which checks `CI`).
 - [~] More fuzz targets: `lut_eval` and `transform_full` added, with seed corpora in `fuzz/corpus/`, and the CI fuzz job runs all three. Replay test covers the seeds on every platform. Not run under libFuzzer here (needs Linux). Still open: `mAB` and `mft` seeds, and corpus caching.
 
 ### Adoption
 - [~] Cookbook examples in `crates/tpt-colour/examples/`: `composite_layers`, `hdr_tonemap`, `batch_pixels`, `ycbcr_video`, `parse_and_gradient` and `wcag_check` are new. `convert` already covers the sRGB to P3 and gamut-map cases. `icc_inspect` is covered by `tpt-colour info`. Still open: `cmyk_to_srgb_softproof` (needs a CMYK profile).
 - [ ] More doctests (every public item) and per-crate docs
-- [ ] mdBook guide (intents, BPC, determinism, f32 vs f64, cache) and a "tpt-colour vs palette/lcms2/moxcms" page
+- [x] mdBook guide in `docs/book` (intents, BPC, gamut mapping, precision, determinism, the cache, soft-proofing, bindings, colour spaces, ICC profiles, comparisons, limits). Its examples run through `tools/book/test_book.py`. A "tpt-colour vs palette/lcms2/moxcms" section is in comparisons, with moxcms not yet measured.
 - [~] README crate table, precision notes and development commands are updated. Still open: badges, MSRV policy, and a note that `std` is only needed for file I/O (the features that asked for it were removed).
-- [ ] `cargo-generate` starter template
+- [x] `cargo-generate` starter template in `templates/starter`. It generates and runs. Its dependency is the repository's git URL, which needs this work on `master` before it builds against the published repository.
 - [~] `tpt-colour-cli` (crate `tpt-colour-cli`, binary `tpt-colour`, not published): `info`, `convert` and `gamut-check` are done. Still open: `doctor`.
 - [ ] `tpt-colour-image`: `image`/`png`/`jpeg` adapters with embedded ICC extraction, `palette` interop
-- [ ] Bindings: `tpt-colour-wasm` (wasm-bindgen/npm), `tpt-colour-py` (PyO3/maturin), C ABI (cbindgen, in an `unsafe`-allowed crate outside the shipped graph)
+- [x] Bindings: `tpt-colour-wasm` (wasm-bindgen; tests under Node), `tpt-colour-py` (PyO3 and maturin; 9 unittest checks on an installed wheel), and `tpt-colour-capi` (C ABI with a cbindgen header, 4 Rust tests and 13 ctypes checks against the built library). The Python and C crates are outside the default workspace, for the reasons in the root Cargo.toml.
 
 ### Found this round (2026-10-11, later)
 - [x] CLOSED for v1.0 as a known limitation (not release-critical). Perceptual B2A disagrees with LittleCMS for sRGB into the official v4 LUT profile: up to 12 codes at sRGB [0.2, 0, 1] (we give 35, LittleCMS 47). Relative B2A matches within one code. The B2A0 table is steep there. A 0.003 difference in PCS X moves red by 7 codes. LittleCMS's perceptual PCS differs from ours, so its source black detection for a v2 sRGB matrix is the likely cause. Test is `#[ignore]`d in `crates/tpt-colour-oracle/tests/littlecms.rs`.

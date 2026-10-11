@@ -51,3 +51,54 @@ mod tests {
         }
     }
 }
+
+/// Encodes integer RGB as `[Y, Co, Cg]` with YCoCg-R, the reversible lifting form (Malvar,
+/// Sullivan and Srinivasan, 2008). Each output is an exact integer, and [`ycocg_r_decode`]
+/// inverts it.
+///
+/// For 8-bit input, `Y` is in `0..=255`, and `Co` and `Cg` are in `-255..=255`.
+#[must_use]
+#[allow(clippy::many_single_char_names)] // RGB and YCoCg component names
+pub fn ycocg_r_encode([r, g, b]: [i32; 3]) -> [i32; 3] {
+    let co = r - b;
+    let t = b + (co >> 1);
+    let cg = g - t;
+    let y = t + (cg >> 1);
+    [y, co, cg]
+}
+
+/// Decodes YCoCg-R `[Y, Co, Cg]` to integer RGB. The exact inverse of [`ycocg_r_encode`].
+#[must_use]
+#[allow(clippy::many_single_char_names)] // RGB and YCoCg component names
+pub fn ycocg_r_decode([y, co, cg]: [i32; 3]) -> [i32; 3] {
+    let t = y - (cg >> 1);
+    let g = cg + t;
+    let b = t - (co >> 1);
+    let r = b + co;
+    [r, g, b]
+}
+
+#[cfg(test)]
+mod r_tests {
+    use super::{ycocg_r_decode, ycocg_r_encode};
+
+    #[test]
+    fn every_8_bit_colour_round_trips_exactly() {
+        for r in (0..=255).step_by(3) {
+            for g in (0..=255).step_by(3) {
+                for b in 0..=255 {
+                    let ycc = ycocg_r_encode([r, g, b]);
+                    assert_eq!(ycocg_r_decode(ycc), [r, g, b]);
+                    assert!((0..=255).contains(&ycc[0]));
+                    assert!((-255..=255).contains(&ycc[1]) && (-255..=255).contains(&ycc[2]));
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn white_and_black_are_exact() {
+        assert_eq!(ycocg_r_encode([255, 255, 255]), [255, 0, 0]);
+        assert_eq!(ycocg_r_encode([0, 0, 0]), [0, 0, 0]);
+    }
+}

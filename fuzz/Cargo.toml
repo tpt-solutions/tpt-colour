@@ -14,6 +14,7 @@ cargo-fuzz = true
 
 [dependencies]
 libfuzzer-sys = "0.4"
+tpt-colour-core = { path = "../crates/tpt-colour-core" }
 tpt-colour-icc = { path = "../crates/tpt-colour-icc" }
 
 [[bin]]
@@ -34,6 +35,13 @@ bench = false
 [[bin]]
 name = "transform_full"
 path = "fuzz_targets/transform_full.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "parse_css"
+path = "fuzz_targets/parse_css.rs"
 test = false
 doc = false
 bench = false

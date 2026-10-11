@@ -13,18 +13,22 @@ mod black;
 mod bytes;
 mod describe;
 mod error;
+mod id;
 mod lut;
 mod lut_tags;
 mod math;
 mod matrix;
+mod md5;
 pub mod pcs;
 mod profile;
 mod tag;
 mod transform;
 mod trc;
+mod write;
 
 pub use describe::Step;
 pub use error::IccError;
+pub use id::{ProfileIdCheck, check_profile_id, computed_profile_id};
 pub use lut::Pipeline;
 pub use profile::{
     IccProfile, IccVersion, LutTables, MatrixTrc, ParseIntentError, ProfileClass,

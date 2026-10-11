@@ -1,0 +1,8 @@
+[template]
+cargo_names = true
+ignore = ["target", ".git"]
+
+[placeholders.colour_space_example]
+type = "bool"
+prompt = "Include an example that converts sRGB to Display P3?"
+default = true

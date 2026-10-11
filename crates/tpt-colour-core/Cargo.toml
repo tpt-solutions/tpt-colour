@@ -18,8 +18,10 @@ workspace = true
 
 [features]
 default = []
+serde = ["dep:serde"]
 
 [dependencies]
+serde = { workspace = true, optional = true }
 libm.workspace = true
 
 [dev-dependencies]

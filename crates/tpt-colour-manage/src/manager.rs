@@ -88,8 +88,15 @@ impl ManagedTransform {
     }
 }
 
+/// A cached transform and the tick at which it was last used.
+#[derive(Debug)]
+struct Cached {
+    transform: Arc<ManagedTransform>,
+    last_used: u64,
+}
+
 /// One cached transform per rendering intent, indexed by [`intent_code`].
-type IntentSlots = [Option<Arc<ManagedTransform>>; 4];
+type IntentSlots = [Option<Cached>; 4];
 
 /// Registers profiles by name and caches the transforms built from them.
 ///
@@ -98,19 +105,57 @@ type IntentSlots = [Option<Arc<ManagedTransform>>; 4];
 ///
 /// The cache is keyed by source name, then destination name, so a lookup by `&str` does not
 /// allocate. Only a cache miss copies the names.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct ColourManager {
     profiles: BTreeMap<String, Arc<IccProfile>>,
     cache: BTreeMap<String, BTreeMap<String, IntentSlots>>,
+    capacity: usize,
+    clock: u64,
+}
+
+impl Default for ColourManager {
+    fn default() -> Self {
+        Self {
+            profiles: BTreeMap::new(),
+            cache: BTreeMap::new(),
+            capacity: usize::MAX,
+            clock: 0,
+        }
+    }
 }
 
 impl ColourManager {
-    /// Creates a manager with the built-in sRGB and Display P3 profiles registered.
+    /// Creates a manager with the built-in sRGB and Display P3 profiles registered. The cache is
+    /// unbounded; use [`ColourManager::with_capacity`] to cap it.
     #[must_use]
     pub fn new() -> Self {
         let mut m = Self::default();
         m.register("srgb", IccProfile::srgb());
         m.register("display-p3", IccProfile::display_p3());
+        m
+    }
+
+    /// Creates a manager whose cache holds at most `max_transforms` transforms. When a new one
+    /// would exceed the cap, the least recently used transform is dropped. A cap of zero is
+    /// treated as one.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use tpt_colour_manage::ColourManager;
+    /// use tpt_colour_icc::RenderingIntent;
+    ///
+    /// let mut colour = ColourManager::with_capacity(2);
+    /// colour.transform("srgb", "display-p3", RenderingIntent::Perceptual)?;
+    /// colour.transform("display-p3", "srgb", RenderingIntent::Perceptual)?;
+    /// colour.transform("srgb", "srgb", RenderingIntent::Perceptual)?;
+    /// assert_eq!(colour.cached_transforms(), 2);
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    #[must_use]
+    pub fn with_capacity(max_transforms: usize) -> Self {
+        let mut m = Self::new();
+        m.capacity = max_transforms.max(1);
         m
     }
 
@@ -171,13 +216,16 @@ impl ColourManager {
         intent: RenderingIntent,
     ) -> Result<Arc<ManagedTransform>, ManageError> {
         let slot = usize::from(intent_code(intent));
-        let cached = self
+        self.clock += 1;
+        let now = self.clock;
+        if let Some(cached) = self
             .cache
-            .get(src)
-            .and_then(|destinations| destinations.get(dst))
-            .and_then(|slots| slots[slot].as_ref());
-        if let Some(t) = cached {
-            return Ok(Arc::clone(t));
+            .get_mut(src)
+            .and_then(|destinations| destinations.get_mut(dst))
+            .and_then(|slots| slots[slot].as_mut())
+        {
+            cached.last_used = now;
+            return Ok(Arc::clone(&cached.transform));
         }
         let src_profile = self.resolve(src)?;
         let dst_profile = self.resolve(dst)?;
@@ -187,12 +235,49 @@ impl ColourManager {
             _ => None,
         };
         let managed = Arc::new(ManagedTransform { inner, gamut });
+        if self.cached_transforms() >= self.capacity {
+            self.evict_least_recently_used();
+        }
         self.cache
             .entry(String::from(src))
             .or_default()
             .entry(String::from(dst))
-            .or_default()[slot] = Some(Arc::clone(&managed));
+            .or_default()[slot] = Some(Cached {
+            transform: Arc::clone(&managed),
+            last_used: now,
+        });
         Ok(managed)
+    }
+
+    /// Removes the cached transform with the oldest `last_used`, and any empty maps around it.
+    fn evict_least_recently_used(&mut self) {
+        let oldest = self
+            .cache
+            .iter()
+            .flat_map(|(src, destinations)| {
+                destinations.iter().flat_map(move |(dst, slots)| {
+                    slots.iter().enumerate().filter_map(move |(slot, entry)| {
+                        entry
+                            .as_ref()
+                            .map(|c| (c.last_used, src.clone(), dst.clone(), slot))
+                    })
+                })
+            })
+            .min_by_key(|(last_used, ..)| *last_used);
+        let Some((_, src, dst, slot)) = oldest else {
+            return;
+        };
+        if let Some(destinations) = self.cache.get_mut(&src) {
+            if let Some(slots) = destinations.get_mut(&dst) {
+                slots[slot] = None;
+                if slots.iter().all(Option::is_none) {
+                    destinations.remove(&dst);
+                }
+            }
+            if destinations.is_empty() {
+                self.cache.remove(&src);
+            }
+        }
     }
 
     fn resolve(&self, name: &str) -> Result<Arc<IccProfile>, ManageError> {
@@ -218,5 +303,59 @@ impl core::error::Error for ManageError {
             Self::Icc(e) => Some(e),
             Self::UnknownProfile(_) => None,
         }
+    }
+}
+
+#[cfg(test)]
+mod lru_tests {
+    use alloc::sync::Arc;
+
+    use super::ColourManager;
+    use tpt_colour_icc::RenderingIntent;
+
+    #[test]
+    fn the_least_recently_used_transform_is_evicted() {
+        let mut m = ColourManager::with_capacity(2);
+        let intent = RenderingIntent::Perceptual;
+        let a = m.transform("srgb", "display-p3", intent).unwrap();
+        let _b = m.transform("display-p3", "srgb", intent).unwrap();
+        // Touch `a`, so `b` is now the oldest.
+        let a_again = m.transform("srgb", "display-p3", intent).unwrap();
+        assert!(
+            Arc::ptr_eq(&a, &a_again),
+            "a hit returns the cached transform"
+        );
+        let _c = m.transform("srgb", "srgb", intent).unwrap();
+        assert_eq!(m.cached_transforms(), 2);
+        // `a` survived, so it is still the same allocation.
+        let a_third = m.transform("srgb", "display-p3", intent).unwrap();
+        assert!(
+            Arc::ptr_eq(&a, &a_third),
+            "the recently used entry was kept"
+        );
+    }
+
+    #[test]
+    fn an_unbounded_manager_keeps_everything() {
+        let mut m = ColourManager::new();
+        for intent in [
+            RenderingIntent::Perceptual,
+            RenderingIntent::RelativeColorimetric,
+            RenderingIntent::Saturation,
+            RenderingIntent::AbsoluteColorimetric,
+        ] {
+            m.transform("srgb", "display-p3", intent).unwrap();
+        }
+        assert_eq!(m.cached_transforms(), 4);
+    }
+
+    #[test]
+    fn a_zero_cap_still_caches_one_transform() {
+        let mut m = ColourManager::with_capacity(0);
+        m.transform("srgb", "display-p3", RenderingIntent::Perceptual)
+            .unwrap();
+        m.transform("display-p3", "srgb", RenderingIntent::Perceptual)
+            .unwrap();
+        assert_eq!(m.cached_transforms(), 1);
     }
 }

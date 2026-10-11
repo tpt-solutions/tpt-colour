@@ -128,6 +128,11 @@ fn para(body: &[u8]) -> Result<Trc, IccError> {
     if degenerate {
         return Err(IccError::BadTag);
     }
+    // Function type 0 is exactly `x^g`, which is `Trc::Gamma`. Using that variant keeps the
+    // inverse analytic, and a parametric inverse is baked into a table with a small error.
+    if kind == 0 {
+        return Ok(Trc::Gamma(g));
+    }
     Ok(Trc::Parametric { function, params })
 }
 

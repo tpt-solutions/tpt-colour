@@ -1,0 +1,15 @@
+[build-system]
+requires = ["maturin>=1.5,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "tpt-colour"
+version = "0.1.0"
+description = "Pure-Rust colour management: parsing, contrast, colour-vision simulation, harmonies and ICC transforms"
+requires-python = ">=3.9"
+license = { text = "MIT OR Apache-2.0" }
+classifiers = ["Programming Language :: Rust", "Topic :: Multimedia :: Graphics"]
+
+[tool.maturin]
+module-name = "tpt_colour"
+features = ["pyo3/extension-module"]

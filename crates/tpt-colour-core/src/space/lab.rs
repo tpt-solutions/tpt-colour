@@ -1,6 +1,6 @@
 //! CIE `Lab` and `LCh` (D65 reference white), and Oklab / Oklch.
 
-use super::{ColourSpace, D65};
+use super::{ColourSpace, D50, D65, d50_to_d65, d65_to_d50};
 use crate::math::{atan2, cbrt, cos, mat3_mul, sin, sqrt};
 
 const LAB_EPSILON: f32 = 216.0 / 24_389.0; // (6/29)³
@@ -23,20 +23,30 @@ fn lab_f_inv(t: f32) -> f32 {
 }
 
 fn xyz_to_lab(xyz: [f32; 3]) -> [f32; 3] {
-    let fx = lab_f(xyz[0] / D65[0]);
-    let fy = lab_f(xyz[1] / D65[1]);
-    let fz = lab_f(xyz[2] / D65[2]);
+    xyz_to_lab_white(xyz, D65)
+}
+
+/// XYZ to CIE L*a*b* relative to `white` (XYZ with `Y = 1`).
+fn xyz_to_lab_white(xyz: [f32; 3], white: [f32; 3]) -> [f32; 3] {
+    let fx = lab_f(xyz[0] / white[0]);
+    let fy = lab_f(xyz[1] / white[1]);
+    let fz = lab_f(xyz[2] / white[2]);
     [116.0 * fy - 16.0, 500.0 * (fx - fy), 200.0 * (fy - fz)]
 }
 
 fn lab_to_xyz(lab: [f32; 3]) -> [f32; 3] {
+    lab_to_xyz_white(lab, D65)
+}
+
+/// CIE L*a*b* relative to `white` to XYZ with `Y = 1` for white.
+fn lab_to_xyz_white(lab: [f32; 3], white: [f32; 3]) -> [f32; 3] {
     let fy = (lab[0] + 16.0) / 116.0;
     let fx = fy + lab[1] / 500.0;
     let fz = fy - lab[2] / 200.0;
     [
-        D65[0] * lab_f_inv(fx),
-        D65[1] * lab_f_inv(fy),
-        D65[2] * lab_f_inv(fz),
+        white[0] * lab_f_inv(fx),
+        white[1] * lab_f_inv(fy),
+        white[2] * lab_f_inv(fz),
     ]
 }
 
@@ -168,5 +178,22 @@ mod hue_tests {
             );
             assert!(h.is_sign_positive(), "hue {h} is negative zero for {lab:?}");
         }
+    }
+}
+
+/// CIE L*a*b* with the D50 reference white, the white ICC profiles use for their PCS.
+///
+/// XYZ is D65-relative at this trait's boundary, as everywhere else in the crate, so `from_xyz`
+/// and `to_xyz` adapt between the two whites with Bradford.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct Lab50;
+
+impl ColourSpace<3> for Lab50 {
+    fn to_xyz(&self, lab: [f32; 3]) -> [f32; 3] {
+        d50_to_d65(lab_to_xyz_white(lab, D50))
+    }
+
+    fn from_xyz(&self, xyz: [f32; 3]) -> [f32; 3] {
+        xyz_to_lab_white(d65_to_d50(xyz), D50)
     }
 }

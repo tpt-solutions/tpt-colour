@@ -1,0 +1,7 @@
+# release-plz: release pull requests only. Publishing is a decision for the maintainer, so this
+# file turns it off for every crate in the workspace.
+
+[workspace]
+publish = false
+changelog_update = true
+semver_check = true

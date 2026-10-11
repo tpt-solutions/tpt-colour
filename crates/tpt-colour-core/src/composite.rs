@@ -75,6 +75,7 @@ impl PremultipliedRgba {
 /// Porter-Duff compositing operators (Porter & Duff, 1984).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[non_exhaustive]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum PorterDuff {
     /// Result is transparent.
     Clear,
@@ -219,6 +220,7 @@ pub fn blend_over(src: PremultipliedRgba, dst: PremultipliedRgba) -> Premultipli
 /// Separable blend modes (W3C Compositing and Blending Level 1).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[non_exhaustive]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum BlendMode {
     /// Source replaces destination (no blending). Equivalent to source-over.
     Normal,

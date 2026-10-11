@@ -11,6 +11,7 @@ use crate::transform::{Backward, ColourTransform, Forward};
 /// One step of a transform, in the order the data passes through it.
 #[derive(Clone, Debug, PartialEq)]
 #[non_exhaustive]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Step {
     /// Tone curves, one per channel. Forward it is the TRC, backward the inverse TRC.
     Curves {

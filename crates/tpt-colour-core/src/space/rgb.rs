@@ -185,6 +185,12 @@ impl ColourSpace<3> for SRgb {
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct LinearSRgb;
 
+/// scRGB (IEC 61966-2-2): linear sRGB primaries with values allowed outside `[0, 1]`.
+///
+/// [`LinearSRgb`] already accepts and returns out-of-range values unchanged, so scRGB and linear
+/// sRGB are the same conversion. The alias names the extended-range use.
+pub type ScRgb = LinearSRgb;
+
 impl ColourSpace<3> for LinearSRgb {
     fn to_xyz(&self, c: [f32; 3]) -> [f32; 3] {
         mat3_mul(&SRGB_TO_XYZ, c)

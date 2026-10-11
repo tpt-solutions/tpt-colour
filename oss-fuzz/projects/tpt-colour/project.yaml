@@ -1,0 +1,11 @@
+homepage: "https://github.com/tpt-solutions/tpt-colour"
+language: rust
+primary_contact: "REPLACE-WITH-MAINTAINER-EMAIL"
+main_repo: "https://github.com/tpt-solutions/tpt-colour"
+fuzzing_engines:
+  - libfuzzer
+sanitizers:
+  - address
+  - undefined
+architectures:
+  - x86_64

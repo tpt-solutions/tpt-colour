@@ -29,7 +29,9 @@ wildcards = "deny"
 # No C-FFI in shipped crates: LittleCMS lives only in the excluded oracle crate.
 # Build-script and binding tooling that would pull C sources in is banned outright.
 deny = [
-    { crate = "cc", reason = "C build tooling; shipped crates are pure Rust" },
+    # `cc` is allowed only as the build tool of `minicov`, the coverage runtime behind
+    # `wasm-bindgen-test`. That is a dev dependency of the wasm binding, which is not shipped.
+    { crate = "cc", wrappers = ["minicov"], reason = "C build tooling; shipped crates are pure Rust" },
     { crate = "cmake", reason = "C build tooling; shipped crates are pure Rust" },
     { crate = "bindgen", reason = "C binding generator; shipped crates are pure Rust" },
     { crate = "pkg-config", reason = "C library discovery; shipped crates are pure Rust" },

@@ -19,6 +19,7 @@ pub const DEFAULT_THRESHOLD: f32 = 2.0;
 /// One proofed pixel: the colour as it appears on the display, and whether the proof changed it
 /// by more than the threshold.
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Proofed {
     /// Display-space device values in `[0, 1]`.
     pub rgb: [f32; 3],

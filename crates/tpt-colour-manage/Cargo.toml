@@ -18,9 +18,11 @@ workspace = true
 
 [features]
 default = []
+serde = ["dep:serde", "tpt-colour-icc/serde", "tpt-colour-core/serde"]
 simd = ["tpt-colour-icc/simd"]
 
 [dependencies]
+serde = { workspace = true, optional = true }
 tpt-colour-core.workspace = true
 tpt-colour-icc.workspace = true
 libm.workspace = true

@@ -17,6 +17,7 @@ const MIN_LEN: usize = 132;
 
 /// ICC profile version.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct IccVersion {
     /// Major version (`2` or `4` in practice).
     pub major: u8,
@@ -26,6 +27,7 @@ pub struct IccVersion {
 
 /// Profile class from the header.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum ProfileClass {
     /// Scanner or camera input (`scnr`).
     Input,
@@ -60,6 +62,7 @@ impl ProfileClass {
 
 /// Profile connection space (PCS).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum ProfileConnectionSpace {
     /// CIE XYZ, D50-relative.
     Xyz,
@@ -69,6 +72,7 @@ pub enum ProfileConnectionSpace {
 
 /// Rendering intent.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum RenderingIntent {
     /// Perceptual (intent 0).
     #[default]

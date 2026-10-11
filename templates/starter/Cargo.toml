@@ -1,0 +1,12 @@
+[package]
+name = "{{project-name}}"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+description = "{{project-name}}: a colour pipeline built on tpt-colour"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+# Until tpt-colour is published to crates.io, depend on the repository. Once it is, replace this
+# line with `tpt-colour = "0.1"`.
+tpt-colour = { git = "https://github.com/tpt-solutions/tpt-colour" }

@@ -26,10 +26,11 @@
 #![no_std]
 
 pub use tpt_colour_core::{
-    composite, contrast, difference, hex, mix, models, parse, space, vision,
+    composite, contrast, difference, hex, mix, models, palette, parse, space, vision,
 };
 pub use tpt_colour_icc as icc;
 pub use tpt_colour_icc::RenderingIntent;
+pub use tpt_colour_icc::{ColourTransform, IccProfile};
 pub use tpt_colour_manage as manage;
 pub use tpt_colour_manage::tone;
 pub use tpt_colour_manage::{ColourManager, Gamut, ManageError, ManagedTransform, map_to_gamut};
