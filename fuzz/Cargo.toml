@@ -23,4 +23,19 @@ test = false
 doc = false
 bench = false
 
+
+[[bin]]
+name = "lut_eval"
+path = "fuzz_targets/lut_eval.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "transform_full"
+path = "fuzz_targets/transform_full.rs"
+test = false
+doc = false
+bench = false
+
 [workspace]

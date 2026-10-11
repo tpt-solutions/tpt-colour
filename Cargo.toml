@@ -5,6 +5,7 @@ members = [
     "crates/tpt-colour-icc",
     "crates/tpt-colour-manage",
     "crates/tpt-colour",
+    "crates/tpt-colour-cli",
 ]
 # The oracle crate links LittleCMS (C) for tests only and is never shipped.
 exclude = ["crates/tpt-colour-oracle"]
@@ -14,6 +15,9 @@ version = "0.1.0"
 edition = "2024"
 rust-version = "1.85"
 license = "MIT OR Apache-2.0"
+repository = "https://github.com/tpt-solutions/tpt-colour"
+keywords = ["colour", "color", "icc", "gamut", "compositing"]
+categories = ["graphics", "no-std"]
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

@@ -3,7 +3,8 @@
 use core::fmt;
 
 /// Errors returned when parsing an ICC profile or building a transform.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[non_exhaustive]
 pub enum IccError {
     /// The data ended before a structure it declares.
     Truncated,
@@ -11,7 +12,8 @@ pub enum IccError {
     BadSignature,
     /// A tag points outside the profile or holds invalid parameters.
     BadTag,
-    /// Valid ICC, but uses a feature not yet supported (LUT, grey, CMYK, unknown curve type).
+    /// Valid ICC, but uses a feature not yet supported: `multiProcessElements` tables, a grey or
+    /// non-RGB matrix profile, an unknown curve type, or a LUT that exceeds the profile budget.
     Unsupported,
     /// A colorant matrix is singular and cannot be inverted.
     Singular,

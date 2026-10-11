@@ -12,7 +12,7 @@ mod ycbcr;
 pub use adapt::{d50_to_d65, d65_to_d50};
 pub use cmyk::Cmyk;
 pub use lab::{Lab, Lch, Oklab, Oklch};
-pub use rgb::{DisplayP3, LinearSRgb, Rec2020, SRgb};
+pub use rgb::{AdobeRgb, DisplayP3, LinearSRgb, ProPhotoRgb, Rec2020, SRgb};
 pub use ycbcr::YCbCr;
 
 /// D65 reference white (relative XYZ, `Y = 1`).

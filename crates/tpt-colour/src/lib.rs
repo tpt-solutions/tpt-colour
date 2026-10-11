@@ -25,7 +25,17 @@
 //! ```
 #![no_std]
 
-pub use tpt_colour_core::{composite, space};
+pub use tpt_colour_core::{composite, contrast, difference, hex, mix, models, space};
 pub use tpt_colour_icc as icc;
+pub use tpt_colour_icc::RenderingIntent;
 pub use tpt_colour_manage as manage;
+pub use tpt_colour_manage::tone;
 pub use tpt_colour_manage::{ColourManager, Gamut, ManageError, ManagedTransform, map_to_gamut};
+
+/// The types most programs need, in one import: `use tpt_colour::prelude::*;`.
+pub mod prelude {
+    pub use crate::composite::{BlendMode, PorterDuff, PremultipliedRgba};
+    pub use crate::icc::RenderingIntent;
+    pub use crate::manage::{ColourManager, Gamut, ManagedTransform, map_to_gamut};
+    pub use crate::space::{AdobeRgb, ColourSpace, DisplayP3, Lab, Oklab, Oklch, Rec2020, SRgb};
+}

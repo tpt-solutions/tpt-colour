@@ -25,8 +25,15 @@ const SAMPLES: [[f32; 3]; 5] = [
 
 #[test]
 fn srgb_white_maps_to_d65() {
-    assert_near(SRgb.to_xyz([1.0, 1.0, 1.0]), D65, 1e-3);
+    assert_near(SRgb.to_xyz([1.0, 1.0, 1.0]), D65, 1e-5);
     assert_near(SRgb.to_xyz([0.0, 0.0, 0.0]), [0.0, 0.0, 0.0], 1e-6);
+}
+
+#[test]
+fn every_rgb_space_shares_the_d65_white() {
+    // All the RGB matrices are derived from one white point, so they agree exactly.
+    assert_near(DisplayP3.to_xyz([1.0, 1.0, 1.0]), D65, 1e-5);
+    assert_near(Rec2020.to_xyz([1.0, 1.0, 1.0]), D65, 1e-5);
 }
 
 #[test]
@@ -137,5 +144,58 @@ fn ycbcr_round_trip_and_white() {
         for c in SAMPLES {
             assert_near(m.decode(m.encode(c)), c, 1e-5);
         }
+    }
+}
+
+#[test]
+fn adobe_rgb_white_is_d65_and_round_trips() {
+    use tpt_colour_core::space::AdobeRgb;
+    assert_near(AdobeRgb.to_xyz([1.0, 1.0, 1.0]), D65, 1e-5);
+    for c in SAMPLES {
+        assert_near(AdobeRgb.from_xyz(AdobeRgb.to_xyz(c)), c, 1e-4);
+    }
+}
+
+#[test]
+fn ycbcr_rec601_coefficients() {
+    assert!((YCbCr::REC601.kr() - 0.299).abs() < 1e-6);
+    assert!((YCbCr::REC601.kb() - 0.114).abs() < 1e-6);
+    let m = YCbCr::REC601;
+    assert_near(m.decode(m.encode([0.3, 0.6, 0.9])), [0.3, 0.6, 0.9], 1e-5);
+}
+
+#[test]
+fn transfer_curves_are_odd_for_negative_channels() {
+    // Out-of-range negatives use the linear toe, so f(-x) = -f(x) for each curve.
+    for x in [0.02_f32, 0.3, 0.8] {
+        assert_near(
+            SRgb.to_xyz([-x, 0.0, 0.0]),
+            neg(SRgb.to_xyz([x, 0.0, 0.0])),
+            1e-6,
+        );
+        assert_near(
+            DisplayP3.to_xyz([-x, 0.0, 0.0]),
+            neg(DisplayP3.to_xyz([x, 0.0, 0.0])),
+            1e-6,
+        );
+        assert_near(
+            Rec2020.to_xyz([-x, 0.0, 0.0]),
+            neg(Rec2020.to_xyz([x, 0.0, 0.0])),
+            1e-6,
+        );
+    }
+}
+
+fn neg(v: [f32; 3]) -> [f32; 3] {
+    v.map(|c| -c)
+}
+
+#[test]
+fn prophoto_white_is_d65_after_adaptation_and_round_trips() {
+    use tpt_colour_core::space::ProPhotoRgb;
+    // The D50 white of ProPhoto adapts to the D65 white of the interface.
+    assert_near(ProPhotoRgb.to_xyz([1.0, 1.0, 1.0]), D65, 1e-3);
+    for c in SAMPLES {
+        assert_near(ProPhotoRgb.from_xyz(ProPhotoRgb.to_xyz(c)), c, 1e-4);
     }
 }

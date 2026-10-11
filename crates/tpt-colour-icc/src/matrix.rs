@@ -24,7 +24,8 @@ pub(crate) fn mul_vec(m: &Mat3, v: [f32; 3]) -> [f32; 3] {
 pub(crate) fn inverse(m: &Mat3) -> Result<Mat3, IccError> {
     let [[a, b, c], [d, e, f], [g, h, i]] = *m;
     let det = a * (e * i - f * h) - b * (d * i - f * g) + c * (d * h - e * g);
-    if det.abs() < 1e-9 {
+    // NaN and infinite entries give a non-finite determinant, which is rejected too.
+    if !det.is_finite() || det.abs() < 1e-9 {
         return Err(IccError::Singular);
     }
     let k = 1.0 / det;

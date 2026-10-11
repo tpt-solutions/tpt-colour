@@ -13,6 +13,7 @@ use crate::map::map_to_gamut;
 
 /// Errors from the colour manager.
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum ManageError {
     /// No profile is registered under this name.
     UnknownProfile(String),
@@ -87,17 +88,20 @@ impl ManagedTransform {
     }
 }
 
-/// Cache key: source name, destination name and intent.
-type CacheKey = (String, String, u8);
+/// One cached transform per rendering intent, indexed by [`intent_code`].
+type IntentSlots = [Option<Arc<ManagedTransform>>; 4];
 
 /// Registers profiles by name and caches the transforms built from them.
 ///
 /// Built-in `"srgb"` and `"display-p3"` profiles are registered by [`ColourManager::new`].
 /// Re-registering a name drops every cached transform that uses it.
+///
+/// The cache is keyed by source name, then destination name, so a lookup by `&str` does not
+/// allocate. Only a cache miss copies the names.
 #[derive(Debug, Default)]
 pub struct ColourManager {
     profiles: BTreeMap<String, Arc<IccProfile>>,
-    cache: BTreeMap<CacheKey, Arc<ManagedTransform>>,
+    cache: BTreeMap<String, BTreeMap<String, IntentSlots>>,
 }
 
 impl ColourManager {
@@ -113,8 +117,12 @@ impl ColourManager {
     /// Registers a profile under `name`, replacing any previous one.
     pub fn register(&mut self, name: &str, profile: IccProfile) {
         self.profiles.insert(String::from(name), Arc::new(profile));
+        self.cache.remove(name);
+        for destinations in self.cache.values_mut() {
+            destinations.remove(name);
+        }
         self.cache
-            .retain(|(src, dst, _), _| src != name && dst != name);
+            .retain(|_, destinations| !destinations.is_empty());
     }
 
     /// Parses ICC bytes and registers the result under `name`.
@@ -137,14 +145,20 @@ impl ColourManager {
     /// Number of transforms currently cached.
     #[must_use]
     pub fn cached_transforms(&self) -> usize {
-        self.cache.len()
+        self.cache
+            .values()
+            .flat_map(|destinations| destinations.values())
+            .flatten()
+            .filter(|slot| slot.is_some())
+            .count()
     }
 
     /// Returns the transform from `src` to `dst`, building and caching it on first use.
     ///
-    /// Perceptual transforms gamut-map into the destination when it is a matrix profile.
-    /// Relative and absolute transforms clip. Black point compensation applies to all but
-    /// absolute.
+    /// Perceptual transforms gamut-map into the destination when it has a gamut boundary.
+    /// Relative and absolute transforms clip. Black point compensation follows
+    /// [`ColourTransform::new`]: implicit for perceptual and saturation to v4 destinations, and
+    /// otherwise off. Use [`ColourTransform::with_black_point_compensation`] directly to force it.
     ///
     /// # Errors
     ///
@@ -156,20 +170,28 @@ impl ColourManager {
         dst: &str,
         intent: RenderingIntent,
     ) -> Result<Arc<ManagedTransform>, ManageError> {
-        let key = (String::from(src), String::from(dst), intent_code(intent));
-        if let Some(t) = self.cache.get(&key) {
+        let slot = usize::from(intent_code(intent));
+        let cached = self
+            .cache
+            .get(src)
+            .and_then(|destinations| destinations.get(dst))
+            .and_then(|slots| slots[slot].as_ref());
+        if let Some(t) = cached {
             return Ok(Arc::clone(t));
         }
         let src_profile = self.resolve(src)?;
         let dst_profile = self.resolve(dst)?;
-        let inner =
-            ColourTransform::with_black_point_compensation(&src_profile, &dst_profile, intent)?;
+        let inner = ColourTransform::new(&src_profile, &dst_profile, intent)?;
         let gamut = match intent {
             RenderingIntent::Perceptual => Gamut::from_profile(&dst_profile),
             _ => None,
         };
         let managed = Arc::new(ManagedTransform { inner, gamut });
-        self.cache.insert(key, Arc::clone(&managed));
+        self.cache
+            .entry(String::from(src))
+            .or_default()
+            .entry(String::from(dst))
+            .or_default()[slot] = Some(Arc::clone(&managed));
         Ok(managed)
     }
 
@@ -190,4 +212,11 @@ fn intent_code(intent: RenderingIntent) -> u8 {
     }
 }
 
-impl core::error::Error for ManageError {}
+impl core::error::Error for ManageError {
+    fn source(&self) -> Option<&(dyn core::error::Error + 'static)> {
+        match self {
+            Self::Icc(e) => Some(e),
+            Self::UnknownProfile(_) => None,
+        }
+    }
+}

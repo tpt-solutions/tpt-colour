@@ -171,6 +171,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "tpt-colour-cli"
+version = "0.1.0"
+dependencies = [
+ "tpt-colour",
+]
+
+[[package]]
 name = "tpt-colour-core"
 version = "0.1.0"
 dependencies = [

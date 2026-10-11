@@ -9,6 +9,7 @@ extern crate alloc;
 
 #[cfg(feature = "simd")]
 mod batch;
+mod black;
 mod bytes;
 mod error;
 mod lut;
@@ -24,8 +25,8 @@ mod trc;
 pub use error::IccError;
 pub use lut::Pipeline;
 pub use profile::{
-    IccProfile, IccVersion, LutTables, MatrixTrc, ProfileClass, ProfileConnectionSpace,
-    ProfileModel, RenderingIntent,
+    IccProfile, IccVersion, LutTables, MatrixTrc, ParseIntentError, ProfileClass,
+    ProfileConnectionSpace, ProfileModel, RenderingIntent,
 };
 pub use transform::ColourTransform;
 pub use trc::Trc;

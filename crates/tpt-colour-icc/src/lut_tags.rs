@@ -61,7 +61,7 @@ fn read_u8_tables(body: &[u8], pos: &mut usize, count: usize) -> Result<Vec<Trc>
     let mut curves = Vec::with_capacity(count);
     for _ in 0..count {
         let raw = slice(body, *pos, 256)?;
-        curves.push(Trc::Table(
+        curves.push(Trc::sampled(
             raw.iter().map(|&b| f32::from(b) / 255.0).collect(),
         ));
         *pos += 256;
@@ -116,7 +116,7 @@ fn read_u16_tables(
             .chunks_exact(2)
             .map(|c| f32::from(u16::from_be_bytes([c[0], c[1]])) / 65_535.0)
             .collect();
-        curves.push(Trc::Table(samples));
+        curves.push(Trc::sampled(samples));
         *pos += entries * 2;
     }
     Ok(curves)

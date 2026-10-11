@@ -4,10 +4,17 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
+description = "Pure-Rust colour management: colour spaces, ICC profiles, gamut mapping, and compositing"
+readme = "README.md"
+repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[package.metadata.docs.rs]
+rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
 default = []
-std = []
 simd = ["tpt-colour-manage/simd"]
 
 [dependencies]

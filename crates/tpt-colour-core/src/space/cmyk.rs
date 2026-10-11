@@ -11,8 +11,14 @@ use super::{ColourSpace, SRgb};
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct Cmyk;
 
+/// Ink coverage clamped to `[0, 1]`. NaN counts as no ink.
+fn coverage(v: f32) -> f32 {
+    if v.is_nan() { 0.0 } else { v.clamp(0.0, 1.0) }
+}
+
 impl ColourSpace<4> for Cmyk {
     fn to_xyz(&self, [c, m, y, k]: [f32; 4]) -> [f32; 3] {
+        let (c, m, y, k) = (coverage(c), coverage(m), coverage(y), coverage(k));
         let key = 1.0 - k;
         let rgb = [(1.0 - c) * key, (1.0 - m) * key, (1.0 - y) * key];
         SRgb.to_xyz(rgb)

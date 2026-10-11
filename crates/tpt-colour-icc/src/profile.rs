@@ -6,7 +6,7 @@ use tpt_colour_core::space::{ColourSpace, D50, DisplayP3, SRgb, d65_to_d50};
 
 use crate::bytes::{sig_at, slice, u32_at};
 use crate::error::IccError;
-use crate::lut::Pipeline;
+use crate::lut::{MAX_PROFILE_CLUT_VALUES, Pipeline};
 use crate::lut_tags::{self, Direction};
 use crate::matrix::Mat3;
 use crate::tag;
@@ -124,6 +124,11 @@ pub struct MatrixTrc {
 pub struct LutTables {
     a2b: [Option<Pipeline>; 3],
     b2a: [Option<Pipeline>; 3],
+    /// Whether each intent has a `D2B` (`multiProcessElements`) tag. Those are read in preference
+    /// to `A2B`, and they are not supported, so transforms refuse such intents.
+    d2b: [bool; 3],
+    /// Whether each intent has a `B2D` (`multiProcessElements`) tag. See [`LutTables::d2b`].
+    b2d: [bool; 3],
 }
 
 impl LutTables {
@@ -145,6 +150,19 @@ impl LutTables {
             .as_ref()
             .or(self.b2a[0].as_ref())
     }
+
+    /// True if `intent` has a `D2B` tag. Such a profile must not be transformed with `A2B`,
+    /// because the reference readers use the `D2B` table instead.
+    #[must_use]
+    pub fn has_d2b(&self, intent: RenderingIntent) -> bool {
+        self.d2b[intent.tag_index()]
+    }
+
+    /// True if `intent` has a `B2D` tag. See [`LutTables::has_d2b`].
+    #[must_use]
+    pub fn has_b2d(&self, intent: RenderingIntent) -> bool {
+        self.b2d[intent.tag_index()]
+    }
 }
 
 /// How a profile maps between its device space and the PCS.
@@ -152,6 +170,8 @@ impl LutTables {
 pub enum ProfileModel {
     /// Three matrix/TRC channels (RGB only).
     Matrix(MatrixTrc),
+    /// One grey TRC (`kTRC`). The PCS is `D50 · Y`, where `Y` is the TRC output.
+    Gray(Trc),
     /// Lookup tables, one set per rendering intent.
     Lut(LutTables),
 }
@@ -224,20 +244,50 @@ impl IccProfile {
         let tags = tag::table(data)?;
         let find = |sig: &[u8; 4]| tags.iter().find(|(s, _)| s == sig).map(|(_, body)| *body);
         let need = |sig: &[u8; 4]| find(sig).ok_or(IccError::Unsupported);
-        let white_point = match find(b"wtpt") {
-            Some(body) => tag::xyz(body)?,
-            None => D50,
-        };
-        let description = find(b"desc")
-            .or_else(|| find(b"mluc"))
-            .or_else(|| find(b"text"))
-            .and_then(tag::text_description);
+        // Metadata never fails the parse: an unreadable `wtpt` falls back to D50.
+        let white_point = find(b"wtpt")
+            .and_then(|body| tag::xyz(body).ok())
+            .unwrap_or(D50);
+        // The description is always stored under the `desc` tag name. Its body may be any of the
+        // text types, and `text_description` checks the type signature.
+        let description = find(b"desc").and_then(tag::text_description);
 
-        let a2b = intent_tags(&tags, *b"A2B", Direction::AtoB)?;
-        let b2a = intent_tags(&tags, *b"B2A", Direction::BtoA)?;
-        let model = if a2b.iter().any(Option::is_some) || b2a.iter().any(Option::is_some) {
-            ProfileModel::Lut(LutTables { a2b, b2a })
+        let a2b = intent_tags(&tags, *b"A2B", Direction::AtoB);
+        let b2a = intent_tags(&tags, *b"B2A", Direction::BtoA);
+        // Each table is capped on its own, but six of them could still hold a lot of memory. The
+        // profile as a whole is capped here, so a hostile file cannot retain gigabytes of CLUTs.
+        let clut_values: usize = a2b
+            .iter()
+            .chain(&b2a)
+            .flatten()
+            .map(Pipeline::clut_values)
+            .sum();
+        if clut_values > MAX_PROFILE_CLUT_VALUES {
+            return Err(IccError::Unsupported);
+        }
+        // A profile is LUT-based when it has the tags, even if every one is unreadable. Those
+        // intents then fail as `Unsupported`, rather than the profile being read as matrix/TRC.
+        let has_lut = [*b"A2B", *b"B2A"].iter().any(|prefix| {
+            (0..3).any(|i| find(&[prefix[0], prefix[1], prefix[2], b'0' + i]).is_some())
+        });
+        let model = if has_lut {
+            let d2b = [0_u8, 1, 2].map(|i| find(&[b'D', b'2', b'B', b'0' + i]).is_some());
+            let b2d = [0_u8, 1, 2].map(|i| find(&[b'B', b'2', b'D', b'0' + i]).is_some());
+            ProfileModel::Lut(LutTables { a2b, b2a, d2b, b2d })
         } else {
+            if data_space == *b"GRAY" {
+                // A grey profile has one TRC, which maps device value to relative luminance.
+                return Ok(Self {
+                    version: IccVersion { major, minor },
+                    class,
+                    device_channels,
+                    pcs,
+                    intent,
+                    description,
+                    white_point,
+                    model: ProfileModel::Gray(tag::trc(need(b"kTRC")?)?),
+                });
+            }
             if data_space != *b"RGB " {
                 return Err(IccError::Unsupported);
             }
@@ -249,7 +299,7 @@ impl IccProfile {
                 tag::trc(need(b"gTRC")?)?,
                 tag::trc(need(b"bTRC")?)?,
             ];
-            let chad = find(b"chad").map(tag::chad).transpose()?;
+            let chad = find(b"chad").and_then(|body| tag::chad(body).ok());
             ProfileModel::Matrix(MatrixTrc {
                 colorants,
                 trc,
@@ -283,20 +333,21 @@ impl IccProfile {
 }
 
 /// Parses the three intent variants of one LUT tag family (`A2B0..2` or `B2A0..2`).
+///
+/// A table that fails to parse counts as absent. Only the intents that use it are affected, and
+/// they then report `Unsupported`, so one bad unused tag cannot fail the whole profile.
 fn intent_tags(
     tags: &[([u8; 4], &[u8])],
     prefix: [u8; 3],
     direction: Direction,
-) -> Result<[Option<Pipeline>; 3], IccError> {
+) -> [Option<Pipeline>; 3] {
     let mut out: [Option<Pipeline>; 3] = [None, None, None];
     for (i, slot) in out.iter_mut().enumerate() {
         let sig = [prefix[0], prefix[1], prefix[2], b'0' + i as u8];
         let body = tags.iter().find(|(s, _)| *s == sig).map(|(_, body)| *body);
-        *slot = body
-            .map(|body| lut_tags::pipeline(body, direction))
-            .transpose()?;
+        *slot = body.and_then(|body| lut_tags::pipeline(body, direction).ok());
     }
-    Ok(out)
+    out
 }
 
 /// The sRGB transfer function as an ICC parametric curve (type 3).
@@ -337,5 +388,32 @@ fn builtin<S: ColourSpace<3>>(space: S, description: &str) -> IccProfile {
             trc: [srgb_trc(), srgb_trc(), srgb_trc()],
             chad: None,
         }),
+    }
+}
+
+/// Error from parsing a rendering intent name.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ParseIntentError;
+
+impl core::fmt::Display for ParseIntentError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str("expected perceptual, relative, saturation or absolute")
+    }
+}
+
+impl core::error::Error for ParseIntentError {}
+
+impl core::str::FromStr for RenderingIntent {
+    type Err = ParseIntentError;
+
+    /// Parses `perceptual`, `relative`, `saturation` or `absolute`, ignoring ASCII case.
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_ascii_lowercase().as_str() {
+            "perceptual" => Ok(Self::Perceptual),
+            "relative" => Ok(Self::RelativeColorimetric),
+            "saturation" => Ok(Self::Saturation),
+            "absolute" => Ok(Self::AbsoluteColorimetric),
+            _ => Err(ParseIntentError),
+        }
     }
 }

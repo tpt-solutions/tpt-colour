@@ -26,6 +26,10 @@ jobs:
         run: cargo build --workspace
       - name: Test
         run: cargo test --workspace
+      - name: Docs (warnings are errors)
+        env:
+          RUSTDOCFLAGS: -D warnings
+        run: cargo doc --workspace --no-deps
 
   msrv:
     name: Minimum supported Rust version (1.85)
@@ -45,7 +49,7 @@ jobs:
         with:
           targets: thumbv7em-none-eabihf
       - uses: Swatinem/rust-cache@v2
-      - run: cargo check --workspace --target thumbv7em-none-eabihf
+      - run: cargo check --workspace --exclude tpt-colour-cli --target thumbv7em-none-eabihf
 
   deny:
     name: Supply chain (cargo-deny)
@@ -65,7 +69,7 @@ jobs:
         with:
           targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
-      - run: cargo check --workspace --target wasm32-unknown-unknown
+      - run: cargo check --workspace --exclude tpt-colour-cli --target wasm32-unknown-unknown
 
   determinism:
     # Bit-exact outputs must match x86-64 (see crates/tpt-colour-manage/tests/determinism.rs).
@@ -89,14 +93,17 @@ jobs:
       - run: cargo test --manifest-path crates/tpt-colour-oracle/Cargo.toml
 
   fuzz-smoke:
-    name: Fuzz smoke (60 s)
+    name: Fuzz smoke (60 s per target)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@nightly
       - run: cargo install cargo-fuzz --locked
       - working-directory: fuzz
-        run: cargo fuzz run icc_parse -- -max_total_time=60
+        run: |
+          for target in icc_parse lut_eval transform_full; do
+            cargo fuzz run "$target" -- -max_total_time=60
+          done
 
   simd:
     # The `simd` feature needs Rust 1.95 (tpt-simd's minimum), so it is tested on stable,

@@ -41,11 +41,22 @@ fn lab_to_xyz(lab: [f32; 3]) -> [f32; 3] {
 }
 
 /// Converts rectangular `(L, a, b)` to polar `(L, C, h)` with `h` in degrees in `[0, 360)`.
+///
+/// The hue of an achromatic colour (chroma near zero) is the angle of its rounding noise. It is
+/// kept, not zeroed, so that converting back to `(a, b)` is exact. Test the chroma to find
+/// greys.
 fn to_polar(lab: [f32; 3]) -> [f32; 3] {
     let c = sqrt(lab[1] * lab[1] + lab[2] * lab[2]);
     let mut h = atan2(lab[2], lab[1]).to_degrees();
     if h < 0.0 {
         h += 360.0;
+    }
+    // A tiny negative angle rounds up to exactly 360, and `atan2(-0.0, x)` gives -0.0.
+    if h >= 360.0 {
+        h -= 360.0;
+    }
+    if h == 0.0 {
+        h = 0.0;
     }
     [lab[0], c, h]
 }
@@ -134,5 +145,28 @@ impl ColourSpace<3> for Oklch {
 
     fn from_xyz(&self, xyz: [f32; 3]) -> [f32; 3] {
         to_polar(Oklab.from_xyz(xyz))
+    }
+}
+
+#[cfg(test)]
+mod hue_tests {
+    use super::to_polar;
+
+    #[test]
+    fn hue_is_in_range_and_never_negative_zero() {
+        // Negative zero hue, and a tiny negative angle that would round to 360.
+        for lab in [
+            [50.0, 10.0, -0.0],
+            [50.0, -10.0, -0.0],
+            [50.0, 10.0, 0.0],
+            [50.0, 1.0, -1e-30],
+        ] {
+            let h = to_polar(lab)[2];
+            assert!(
+                (0.0..360.0).contains(&h),
+                "hue {h} out of range for {lab:?}"
+            );
+            assert!(h.is_sign_positive(), "hue {h} is negative zero for {lab:?}");
+        }
     }
 }

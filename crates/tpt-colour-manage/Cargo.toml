@@ -4,13 +4,20 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
+description = "Gamut mapping, profile management, and HDR tone mapping on top of tpt-colour-icc"
+readme = "README.md"
+repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[package.metadata.docs.rs]
+rustdoc-args = ["--cfg", "docsrs"]
 
 [lints]
 workspace = true
 
 [features]
 default = []
-std = []
 simd = ["tpt-colour-icc/simd"]
 
 [dependencies]

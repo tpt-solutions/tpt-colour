@@ -32,14 +32,28 @@ pub enum Trc {
 pub(crate) const BAKED_SAMPLES: usize = 4096;
 
 impl Trc {
+    /// Builds a table from profile samples. A dip in the samples is replaced by the running
+    /// maximum before it is stored. Otherwise the inverse lookup, which binary-searches the
+    /// table, would give undefined results on a non-monotonic curve.
+    pub(crate) fn sampled(mut samples: Vec<f32>) -> Trc {
+        let mut max = f32::NEG_INFINITY;
+        for v in &mut samples {
+            max = max.max(*v);
+            *v = max;
+        }
+        Trc::Table(samples)
+    }
+
     /// Samples the forward curve (encoded → linear) into a table, so evaluation needs no `powf`.
     ///
-    /// Tables and identity curves are returned unchanged.
+    /// Tables, identity and pure power curves are returned unchanged. A power curve with an
+    /// exponent below one has an unbounded slope at zero, so linear interpolation in a table is
+    /// off by about a code near black. Keeping the power exact avoids that.
     #[must_use]
     pub(crate) fn bake(&self) -> Trc {
         match self {
-            Self::Identity | Self::Table(_) => self.clone(),
-            _ => Self::Table(
+            Self::Identity | Self::Table(_) | Self::Gamma(_) => self.clone(),
+            Self::Parametric { .. } => Self::Table(
                 (0..BAKED_SAMPLES)
                     .map(|i| self.eval(i as f32 / (BAKED_SAMPLES - 1) as f32))
                     .collect(),
@@ -49,11 +63,14 @@ impl Trc {
 
     /// Samples the inverse curve (linear → encoded) into a table over the linear domain.
     ///
-    /// Evaluate the result with [`Trc::eval`] to get the encoded value.
+    /// Evaluate the result with [`Trc::eval`] to get the encoded value. A pure power curve
+    /// inverts exactly to another power, `x^(1/γ)`, so it is returned as that instead of a
+    /// table. Sampling `x^(1/γ)` uniformly is about 1.6 codes out near black for γ = 2.2.
     #[must_use]
     pub(crate) fn bake_inverse(&self) -> Trc {
         match self {
             Self::Identity => Self::Identity,
+            Self::Gamma(g) if *g > 0.0 && g.is_finite() => Self::Gamma(1.0 / g),
             _ => Self::Table(
                 (0..BAKED_SAMPLES)
                     .map(|i| self.eval_inverse(i as f32 / (BAKED_SAMPLES - 1) as f32))
@@ -312,5 +329,56 @@ fn parametric_inverse64(function: u16, p: &[f64; 7], y: f64) -> f64 {
             }
         }
         _ => y,
+    }
+}
+
+#[cfg(test)]
+mod bake_tests {
+    use super::*;
+
+    /// Worst error of the baked inverse against the exact inverse, in 8-bit codes.
+    fn worst_codes(curve: &Trc) -> f32 {
+        let baked = curve.bake_inverse();
+        let mut worst = 0.0_f32;
+        for i in 0..=20_000 {
+            let y = i as f32 / 20_000.0;
+            let exact = curve.eval_inverse(y);
+            worst = worst.max((baked.eval(y) - exact).abs() * 255.0);
+        }
+        worst
+    }
+
+    #[test]
+    fn baked_inverse_is_within_a_tenth_of_a_code() {
+        let srgb = Trc::Parametric {
+            function: 3,
+            params: [
+                2.4,
+                1.0 / 1.055,
+                0.055 / 1.055,
+                1.0 / 12.92,
+                0.040_45,
+                0.0,
+                0.0,
+            ],
+        };
+        assert!(worst_codes(&srgb) < 0.1, "sRGB {}", worst_codes(&srgb));
+        // Pure power curves are analytic now, so their inverse is exact.
+        for g in [2.2_f32, 1.8, 0.45] {
+            assert!(worst_codes(&Trc::Gamma(g)) < 0.01, "gamma {g}");
+        }
+    }
+
+    #[test]
+    fn non_monotonic_samples_give_a_monotonic_inverse() {
+        // The dip at index 2 is levelled to the running maximum, so the inverse never falls.
+        let curve = Trc::sampled(alloc::vec![0.0, 0.5, 0.3, 0.9, 1.0]);
+        let mut last = 0.0_f32;
+        for i in 0..=100 {
+            let y = i as f32 / 100.0;
+            let x = curve.eval_inverse(y);
+            assert!(x.is_finite() && x >= last - 1e-6, "y {y}: {x} < {last}");
+            last = x;
+        }
     }
 }

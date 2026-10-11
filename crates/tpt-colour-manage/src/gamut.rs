@@ -20,8 +20,13 @@ pub struct Gamut {
 impl Gamut {
     /// Builds a gamut from a space's primaries. The space's transfer function fixes 0 and 1,
     /// so decoding its unit primaries gives the linear colorants.
-    #[must_use]
-    pub fn from_space<S: ColourSpace<3>>(space: S) -> Self {
+    ///
+    /// # Errors
+    ///
+    /// Returns [`IccError::Singular`] if the primaries are linearly dependent, which happens
+    /// for degenerate or non-finite primaries. There is no fallback, because a wrong inverse
+    /// would give silently wrong gamut tests.
+    pub fn from_space<S: ColourSpace<3>>(space: S) -> Result<Self, IccError> {
         let column = |e: [f32; 3]| space.to_xyz(e);
         let (r, g, b) = (
             column([1.0, 0.0, 0.0]),
@@ -29,29 +34,33 @@ impl Gamut {
             column([0.0, 0.0, 1.0]),
         );
         let to_xyz = [[r[0], g[0], b[0]], [r[1], g[1], b[1]], [r[2], g[2], b[2]]];
-        // Built from valid primaries, so the matrix is never singular.
-        Self::from_colorants(to_xyz).unwrap_or(Self {
-            to_xyz,
-            from_xyz: to_xyz,
-        })
+        Self::from_colorants(to_xyz)
     }
 
     /// sRGB (IEC 61966-2.1 primaries).
     #[must_use]
     pub fn srgb() -> Self {
-        Self::from_space(SRgb)
+        Self::builtin(SRgb)
     }
 
     /// Display P3.
     #[must_use]
     pub fn display_p3() -> Self {
-        Self::from_space(DisplayP3)
+        Self::builtin(DisplayP3)
     }
 
     /// Rec. 2020.
     #[must_use]
     pub fn rec2020() -> Self {
-        Self::from_space(Rec2020)
+        Self::builtin(Rec2020)
+    }
+
+    /// The built-in spaces have well-conditioned primaries. The test suite checks that they build.
+    fn builtin<S: ColourSpace<3>>(space: S) -> Self {
+        match Self::from_space(space) {
+            Ok(gamut) => gamut,
+            Err(_) => unreachable!("built-in primaries are invertible"),
+        }
     }
 
     /// Builds a gamut from a linear-RGB → XYZ (D65) matrix.
@@ -79,7 +88,7 @@ impl Gamut {
                 let adapted = [[r[0], g[0], b[0]], [r[1], g[1], b[1]], [r[2], g[2], b[2]]];
                 Self::from_colorants(adapted).ok()
             }
-            ProfileModel::Lut(_) => None,
+            ProfileModel::Gray(_) | ProfileModel::Lut(_) => None,
         }
     }
 
@@ -139,7 +148,8 @@ fn mul_vec(m: &Mat3, v: [f32; 3]) -> [f32; 3] {
 fn invert(m: &Mat3) -> Result<Mat3, IccError> {
     let [[a, b, c], [d, e, f], [g, h, i]] = *m;
     let det = a * (e * i - f * h) - b * (d * i - f * g) + c * (d * h - e * g);
-    if det.abs() < 1e-9 {
+    // NaN and infinite colorants give a non-finite determinant, which is rejected too.
+    if !det.is_finite() || det.abs() < 1e-9 {
         return Err(IccError::Singular);
     }
     let k = 1.0 / det;

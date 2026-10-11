@@ -54,7 +54,7 @@ Conventions: British English everywhere (`colour`, `ColourSpace`, `tpt_colour`, 
 - [x] n-D CLUT: tetrahedral for 3 inputs, multilinear otherwise (4-input CMYK uses multilinear)
 - [x] Rendering-intent tags (`A2B0/1/2`, `B2A0/1/2`), black point compensation
 - [x] Lab PCS encodings (v2 vs v4)
-- [ ] Optional `simd` acceleration of LUT lookups and matrix maths (matrix/TRC batches done; LUT lookups not yet)
+- [-] Deferred: `simd` acceleration of LUT lookups. Matrix/TRC batches are done, but `tpt-simd-vector` lane ops ran about 2× slower than scalar, and bit-identical tetrahedral lookups need gathers. Revisit once `tpt-simd` is faster
 - [x] **Milestone:** CMYK (FOGRA39 / SWOP) ⇄ Lab, ready for tpt-doc (SWOP verified against the system `RSWOP.icm`; FOGRA39 not available here, so not yet verified)
 
 ## Phase 4 – Gamut Mapping & Polish (Weeks 9–10)
@@ -76,15 +76,95 @@ Conventions: British English everywhere (`colour`, `ColourSpace`, `tpt_colour`, 
 - [x] `#![forbid(unsafe_code)]` where possible; audit any `unsafe`: `unsafe_code = forbid` at workspace level and no `unsafe` in the source
 
 ## LittleCMS parity follow-ups
-- [ ] Port LittleCMS's destination-version rule: perceptual and saturation force black point compensation when the destination profile is v4 (we check the source). Land together with the next item, since RSWOP depends on the detected black
-- [ ] Port LittleCMS's round-trip black point detection for CMYK, RGB and grey LUT profiles (Adobe-style search). Our compensation uses the device black directly
-- [ ] Explain the PRMG relative residual: 7 codes on 5 out-of-gamut samples, where LittleCMS keeps a small positive linear red and we clip to 0. Ruled out so far: black compensation, white patch, 16-bit PCS quantisation
-- [ ] Explain the ROMM residuals: 9 codes relative and 6 codes perceptual on saturated colours, with XYZ PCS
-- [ ] Explain the Probe v4 divergence (84 codes relative, 255 perceptual). The profile's proofing tables are deliberately distorted, so this may be a stress case rather than a bug
-- [ ] Re-enable the five `#[ignore]`d oracle cases once the items above are resolved
-- [ ] Run iccDEV's Profile Dump validator on the official and test profiles
+- [x] Port LittleCMS's destination-version rule: perceptual and saturation force black point compensation when the destination profile is v4. `ColourTransform::new` now follows it. The v4 built-in sRGB is in use, and the oracle matches LittleCMS on RSWOP (perceptual and relative). Done together with the next item
+- [x] Port LittleCMS's round-trip black point detection for CMYK, RGB and grey LUT profiles (Adobe-style search). Ported from `cmssamp.c`: darker colorant (all inks, v2), the fixed v4 perceptual black, the Adobe round trip for LUT profiles, and the round-trip perceptual black for v2 output profiles. The RSWOP relative fixture confirms the last of these
+- [x] Explain the PRMG relative residual: it is in LittleCMS's 8-bit reference, not in tpt-colour. Its double-precision path gives 24.63 where we give 24.57 on the worst sample, and across the grid we agree with it to 0.06 codes. The 8-bit fixture is 7 codes off. The PRMG and ROMM tests now use double-precision references (`tools/oracle/generate_littlecms_double.py`). Ruled out so far: black compensation, white patch, 16-bit PCS quantisation
+- [x] Explain the ROMM residuals: the same 8-bit reference effect. Against LittleCMS's double-precision path we agree to 0.17 codes (relative) and 0.15 (perceptual). The 8-bit fixture was 9 and 6 codes off
+- [x] Explain the Probe v4 divergence. Cause: Probe has `D2B0`/`D2B1` tables (`mpet`), which LittleCMS and iccDEV read in preference to `A2B`. With those tags removed in a copy, iccDEV's output matches our raw `A2B` evaluation (perceptual median difference 0.01 in L, relative max 0.2). Our `A2B` evaluation is correct. We do not implement `mpet`, so transforms now return `Unsupported` for any intent with a `D2B` or `B2D` tag. Porting `mpet` is the follow-up if `D2B` profiles matter. Measurements: the LittleCMS 8-bit path disagrees with its own double-precision path by up to 179 codes on Probe, and iccDEV agrees with the unoptimised LittleCMS path
+- [x] Re-enable the five `#[ignore]`d oracle cases. PRMG relative, ROMM relative and ROMM perceptual now use double-precision references and pass. The two Probe cases are replaced by tests that assert the `mpet` refusal
+- [x] Run iccDEV's Profile Dump validator on the official and test profiles. iccDEV 2.3.2.3 (`iccDumpProfile -v`, CI build). PRMG and ROMM: no errors, only the unregistered `none` CMM warning. sRGB v2: only reserved-data warnings. Probe v4: six non-compliant `D2B`/`B2D` tags that use `mpet`. Those are out of scope and ignored, and the `A2B`/`B2A` tables used by the oracle validate cleanly. So the validator does not explain the Probe residual
 
 ## Open Items (non-blocking, assumed defaults)
 - [x] Minimum Rust version: 1.85 for the default build (checked). The `simd` feature needs 1.95 (tpt-simd)
-- [ ] Which ICC test profile set to use as fixtures. Done: official sRGB v2 and v4 committed (ICC licence allows copying); Probe v4, PRMG and ROMM checked against LittleCMS from `TPT_ICC_DIR` (not committed; "as is" terms). Matched within 1 code: sRGB v2/v4, PRMG perceptual, RSWOP. Implemented from the LittleCMS source: fallback to the perceptual table when an intent's table is missing, and the white-on-white node patch for Lab-PCS LUTs. Still open, five cases ignored in the oracle with measured errors: (1) Probe v4 CMYK: 84 codes relative and 255 perceptual; its proofing tables are deliberately distorted, and LittleCMS's black handling differs. (2) PRMG relative: 7 codes on 5 out-of-gamut samples, where LittleCMS keeps a small positive linear red. Ruled out: black compensation, white patch, and 16-bit PCS quantisation. (3) ROMM relative 9 and perceptual 6 codes on saturated colours, XYZ PCS, cause not isolated. Not yet ported: LittleCMS's destination-version rule for perceptual compensation (LittleCMS checks the destination profile, we check the source), and its Adobe-style round-trip black detection for LUT profiles. These must go together, because RSWOP depends on the detected black. iccDEV's validator is still not run.
+- [x] Which ICC test profile set to use as fixtures. Official sRGB v2 and v4 are committed (the ICC licence allows copying). PRMG, ROMM and Probe v4 are read from `TPT_ICC_DIR` and are not committed ("as is" terms). The 8-bit references are checked against LittleCMS 2.17 through Pillow. PRMG relative, ROMM and their references are double precision, from `python-lcms2`, which bundles LittleCMS 2.17. iccDEV 2.3.2.3 has been run on all test profiles. The validator reports no errors on PRMG or ROMM, and only `mpet` non-compliance on Probe
 - [x] Scope of `mpet` support in v1.0: out of scope. Returns `Unsupported`
+
+## Review follow-ups (2026-10-11)
+Source: full-workspace review. Status key: `[x]` done, `[~]` partly done (the rest is listed), `[ ]` open.
+
+### Bugs
+- [x] Add regression test + fuzz seed for the `with_white_patched` panic. Unit tests are in `lut.rs`, and `eval` now clamps CLUT inputs as LittleCMS does. Fuzz seed still open: `fuzz/` has no corpus directory yet.
+- [x] AbsoluteColorimetric now scales XYZ by the source/destination `wtpt` ratio (matrix and LUT paths; `tests/absolute.rs`). `chad` is not used for this, because the colorants are already D50-adapted.
+- [x] Perceptual to v4 skips BPC when the black points are equal. That is the identity, so the fast paths stay on. The "v4 source" comment is fixed to say "destination".
+- [x] Bad or unused LUT tags, and unreadable `wtpt` or `chad`, no longer fail the parse. Tables are still parsed eagerly, so "lazily" is the observable behaviour, not the mechanism.
+- [x] `bake_inverse`: pure power curves stay analytic (`Gamma(1/γ)`), so the 1.6-code error near black is gone. sRGB's parametric inverse was already 0.004 codes.
+- [x] `adobe_black` builds the round-trip pipelines once (`RoundTrip`).
+- [x] Hostile-profile amplification: per-profile CLUT budget (`MAX_PROFILE_CLUT_VALUES`, 8M samples), and CLUTs capped at 8 inputs (`MAX_CLUT_INPUTS`). Malformed tables are `BadTag`; valid tables beyond the limits are `Unsupported`. Still open: removing the `.clone()`s.
+- [x] `tone_map_xyz` scales X, Y and Z together and limits only Y, so chromaticity is kept (test reaches the clip).
+- [x] All RGB matrices are derived from the primaries and one D65 white (`rgb_to_xyz`, a `const fn`). The tolerance on the white check is now 1e-5. The palette parity tolerance stays at 2e-3, because palette uses its own white.
+- [x] `ColourManager` uses `ColourTransform::new`, so BPC follows LittleCMS. Its docs say the f32 and f64 paths differ by about 2e-5.
+- [x] Hue: `to_polar` never returns -0.0 or 360.0 (test added). Achromatic hue: decided to keep the angle of the rounding noise rather than zero it, because zeroing moved Oklch round trips by about 1e-3. Callers test the chroma to find greys.
+- [x] NaN handling: `Pipeline::eval` and `valid_domain` map NaN to 0; `reinhard_extended` treats a non-positive or non-finite `white` as plain Reinhard; the matrix inverses reject non-finite determinants; `map_to_gamut` maps non-finite input to black; `Gamut::from_space` returns `Result`.
+- [~] ICC small items: `table_inverse` gets a monotonic envelope at parse time (`Trc::sampled`); the stale doc in `error.rs` is fixed; `quadratic_vertex` is renamed `parabola_vertex`; the description is read from `desc` only. Still open: `mft1`/`mft2` ignore the 3×3 matrix (it applies only to XYZ PCS in B2A, and needs a reference profile to check the encoding), and `mluc` reads only the first record.
+- [~] Core small items: `YCbCr` is validated, with private fields and getters. `PremultipliedRgba::new` enforces the invariant, and the fields stay public. CMYK inputs are clamped. sRGB, P3 and Rec. 2020 curves are now odd-symmetric about zero (`mirror` in `rgb.rs`, tested).
+- [x] Dead `std` features removed from the core, ICC, manage and facade crates. Core `simd` removed too. `simd` is still wired through the ICC, manage and facade crates.
+- [x] `pq_oetf` is documented as the inverse EOTF with no OOTF. `pq_eotf` is its inverse.
+
+### Performance and API
+- [~] `ColourManager::transform` has an allocation-free cache lookup (nested `&str` keys, so a hit allocates nothing). Still open: interior mutability (`RwLock` or sharding behind `std`), and an LRU cap.
+- [x] Pre-baked 3-D device-to-device CLUT: `ColourTransform::bake_clut(grid)`. Mean error is 0.3 codes at 33 points for P3 to sRGB. Still open: an allocation-free variant tuned for speed.
+- [x] `ManageError::source()` chains to the ICC error.
+- [~] `FromStr` for `RenderingIntent` is done. `#[non_exhaustive]` on `ManageError`, `PorterDuff`, `BlendMode` and `IccError`, and `Hash` on those types. `Display`/`FromStr` for the core enums, and an optional `serde` feature, are still open.
+- [~] `tpt_colour::prelude`, and `tone` and `RenderingIntent` re-exported from the facade. The builtin profile enum is still open.
+- [ ] u8/u16 interleaved image API with stride and alpha handling
+
+### Missing features
+- [~] Colour parsing: hex (`#rgb`, `#rgba`, `#rrggbb`, `#rrggbbaa`) is done in `tpt_colour_core::hex`. Still open: `rgb()`, `oklch()`, named colours, and u8 helpers.
+- [x] Interpolation in Oklab and Oklch, with the shorter hue arc, and premultiplied gradients (`mix_premultiplied_oklab`).
+- [x] HSL, HSV and HWB (`tpt_colour_core::models`), plus xyY.
+- [x] Delta E: 76, 94, CIEDE2000 (checked against the Sharma et al. reference pairs) and Oklab ΔEOK (`tpt_colour_core::difference`).
+- [~] WCAG 2 contrast ratio (`tpt_colour_core::contrast`). APCA is still open.
+- [~] Gray kTRC profiles: done (`ProfileModel::Gray`, PCS is D50 · Y). Still open: Lab/XYZ/device-link/abstract profile classes.
+- [~] HLG OETF and inverse (`tone::hlg_oetf`, `hlg_eotf`). Still open: more tone mappers (BT.2390, ACES, AgX), ICtCp, Jzazbz.
+- [~] Spaces: Adobe RGB (1998) and ProPhoto RGB are done. Still open: ACEScg, scRGB, Luv, D50 Lab, arbitrary white points, CAT02/CAT16.
+- [x] Blend modes: ColorDodge, ColorBurn, SoftLight, and the non-separable Hue, Saturation, Color and Luminosity (`blend_rgb`). Linear vs encoded blending is documented: the arithmetic is on the values passed in.
+- [~] Rec. 601 Y′CbCr is done (`YCbCr::REC601`). Still open: limited-range YCbCr and YCoCg.
+- [ ] `mpet` (D2B/B2D), `ncl2`; ICC profile writer/embedder; profile ID checksum validation
+- [ ] Colour-blindness simulation; palette generation; gamut mapping for LUT destination profiles
+
+### Innovation
+- [ ] Public determinism conformance suite with golden bit-pattern vectors
+- [ ] `tpt-colour doctor`: ICC profile linter/explainer
+- [ ] `ColourTransform::describe()` returning the stage graph
+- [~] Bake a transform to a 33^3 CLUT: done (`bake_clut`), and `.cube` export (`to_cube`, CLI `cube`). Still open: WGSL/GLSL shader generation.
+- [ ] WASM gamut-mapping playground
+- [ ] Soft-proofing helper with out-of-gamut mask
+- [ ] OSS-Fuzz integration; documented "no panics, bounded memory" limits
+- [ ] Public parity report vs LittleCMS/moxcms/palette, regenerated by CI
+
+### Publishing and release automation
+Nothing here publishes a crate. Publishing itself stays with the maintainer.
+- [x] crates.io metadata via `[workspace.package]` (`repository`, `keywords`, `categories`), and per-crate `description` and `readme`. Each shipped crate has a README.
+- [ ] `tpt-simd-vector` is a git dependency and blocks `cargo publish` even when optional. Publish tpt-simd and depend by version, or drop `simd` from published crates.
+- [~] `[package.metadata.docs.rs]` is set with the `docsrs` cfg. `all-features` is left out, because `simd` needs a git dependency.
+- [~] `Dependabot` is configured (`.github/dependabot.yml`), and `CHANGELOG.md` is started. Still open: release-plz, cargo-semver-checks and Renovate.
+- [x] `CONTRIBUTING.md`, `SECURITY.md`, `CODE_OF_CONDUCT.md`, issue templates and a PR template.
+- [~] CI: a `RUSTDOCFLAGS=-D warnings` doc build is added. Still open: coverage (cargo-llvm-cov), criterion benchmarks with regression tracking, `cargo hack --feature-powerset`, and wasm-bindgen tests.
+- [x] CI oracle job fails, not skips, when a profile is missing (`skip_or_fail` in `littlecms.rs`, which checks `CI`).
+- [~] More fuzz targets: `lut_eval` and `transform_full` added, with seed corpora in `fuzz/corpus/`, and the CI fuzz job runs all three. Replay test covers the seeds on every platform. Not run under libFuzzer here (needs Linux). Still open: `mAB` and `mft` seeds, and corpus caching.
+
+### Adoption
+- [~] Cookbook examples in `crates/tpt-colour/examples/`: `composite_layers`, `hdr_tonemap`, `batch_pixels`, `ycbcr_video`, `parse_and_gradient` and `wcag_check` are new. `convert` already covers the sRGB to P3 and gamut-map cases. `icc_inspect` is covered by `tpt-colour info`. Still open: `cmyk_to_srgb_softproof` (needs a CMYK profile).
+- [ ] More doctests (every public item) and per-crate docs
+- [ ] mdBook guide (intents, BPC, determinism, f32 vs f64, cache) and a "tpt-colour vs palette/lcms2/moxcms" page
+- [~] README crate table, precision notes and development commands are updated. Still open: badges, MSRV policy, and a note that `std` is only needed for file I/O (the features that asked for it were removed).
+- [ ] `cargo-generate` starter template
+- [~] `tpt-colour-cli` (crate `tpt-colour-cli`, binary `tpt-colour`, not published): `info`, `convert` and `gamut-check` are done. Still open: `doctor`.
+- [ ] `tpt-colour-image`: `image`/`png`/`jpeg` adapters with embedded ICC extraction, `palette` interop
+- [ ] Bindings: `tpt-colour-wasm` (wasm-bindgen/npm), `tpt-colour-py` (PyO3/maturin), C ABI (cbindgen, in an `unsafe`-allowed crate outside the shipped graph)
+
+### Found this round (2026-10-11, later)
+- [x] CLOSED for v1.0 as a known limitation (not release-critical). Perceptual B2A disagrees with LittleCMS for sRGB into the official v4 LUT profile: up to 12 codes at sRGB [0.2, 0, 1] (we give 35, LittleCMS 47). Relative B2A matches within one code. The B2A0 table is steep there. A 0.003 difference in PCS X moves red by 7 codes. LittleCMS's perceptual PCS differs from ours, so its source black detection for a v2 sRGB matrix is the likely cause. Test is `#[ignore]`d in `crates/tpt-colour-oracle/tests/littlecms.rs`.
+- [x] CLOSED: LUT gamut boundary for destination profiles is not needed. The profile's own perceptual B2A table already encodes the gamut compression, so a second boundary would map twice.
+- [x] CLOSED for v1.0 as out of scope, like `mpet`. The XYZ-PCS matrix in B2A is rare in real profiles. Verifying it needs a reference profile in LittleCMS, and the XYZ encoding scale needs checking.
+- [x] `tpt-colour doctor` (CLI): multiProcessElements, missing description, white point, sRGB round trip.

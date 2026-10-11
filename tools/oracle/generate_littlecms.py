@@ -16,9 +16,9 @@ OUT = pathlib.Path(__file__).resolve().parents[2] / "crates/tpt-colour-oracle/te
 LEVELS = [0, 64, 128, 191, 255]
 
 
-def transform(src_profile, dst_profile, in_mode, samples):
+def transform(src_profile, dst_profile, in_mode, samples, intent=ImageCms.Intent.PERCEPTUAL):
     """Runs LittleCMS on 8-bit samples; returns RGB triples."""
-    t = ImageCms.buildTransform(src_profile, dst_profile, in_mode, "RGB", ImageCms.Intent.PERCEPTUAL)
+    t = ImageCms.buildTransform(src_profile, dst_profile, in_mode, "RGB", intent)
     img = Image.new(in_mode, (len(samples), 1))
     img.putdata([tuple(s) for s in samples])
     out = ImageCms.applyTransform(img, t)
@@ -38,7 +38,7 @@ def write(name, lines, header):
 def main():
     colour_dir = pathlib.Path(sys.argv[1])
     version = ImageCms.core.littlecms_version
-    header = f"LittleCMS {version} via Pillow, perceptual intent, no BPC"
+    header = f"LittleCMS {version} via Pillow, perceptual intent, no BPC"  # relative is written below
 
     # CMYK (SWOP) → sRGB: exercises the LUT (mAB/mft) path.
     swop = ImageCms.ImageCmsProfile(str(colour_dir / "RSWOP.icm"))
@@ -49,6 +49,14 @@ def main():
         "rswop_cmyk_to_srgb.txt",
         [" ".join(map(str, c)) + " -> " + " ".join(map(str, o)) for c, o in zip(cmyk, rgb)],
         header + ", input CMYK RSWOP.icm",
+    )
+
+    # Relative colorimetric exercises the round-trip black point (BlackPointUsingPerceptualBlack).
+    rel = transform(swop, srgb, "CMYK", cmyk, ImageCms.Intent.RELATIVE_COLORIMETRIC)
+    write(
+        "rswop_cmyk_relative_to_srgb.txt",
+        [" ".join(map(str, c)) + " -> " + " ".join(map(str, o)) for c, o in zip(cmyk, rel)],
+        header.replace("perceptual intent", "relative colorimetric intent") + ", input CMYK RSWOP.icm",
     )
 
     # Gamma 1.8 RGB → sRGB: exercises the matrix/TRC path with a non-sRGB curve.

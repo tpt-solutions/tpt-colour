@@ -12,12 +12,17 @@ const EPSILON: f32 = 0.0001;
 /// Maps an XYZ (D65) colour into `gamut` by reducing OKLCH chroma.
 ///
 /// Lightness and hue are kept. Chroma is reduced by bisection until the colour is inside
-/// the gamut or the clipped colour is within [`JND`] of the original, which is what
-/// "perceptually close" means here. Colours with `L ≥ 1` map to white and `L ≤ 0` to black.
+/// the gamut, or the clipped colour is within the just-noticeable difference of the original.
+/// That is what "perceptually close" means here. Colours with `L ≥ 1` map to white and
+/// `L ≤ 0` to black.
 ///
 /// Colours already inside the gamut are returned unchanged.
 #[must_use]
 pub fn map_to_gamut(gamut: &Gamut, xyz: [f32; 3]) -> [f32; 3] {
+    // A NaN or infinite colour has no lightness or hue, so it maps to black.
+    if !xyz.iter().all(|v| v.is_finite()) {
+        return [0.0, 0.0, 0.0];
+    }
     if gamut.contains(xyz) {
         return xyz;
     }
@@ -68,7 +73,9 @@ pub fn map_to_gamut(gamut: &Gamut, xyz: [f32; 3]) -> [f32; 3] {
             max = chroma;
         }
     }
-    clipped
+    // `clipped` may be from a rejected candidate. Return the clip at the last accepted chroma.
+    let lab = at(min);
+    clip_candidate(gamut, lab, gamut.to_linear(Oklab.to_xyz(lab))).0
 }
 
 /// Clips an Oklab candidate and reports the ΔEOK between the clipped and unclipped colours.

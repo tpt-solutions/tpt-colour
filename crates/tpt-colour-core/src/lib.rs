@@ -6,4 +6,9 @@
 mod math;
 
 pub mod composite;
+pub mod contrast;
+pub mod difference;
+pub mod hex;
+pub mod mix;
+pub mod models;
 pub mod space;

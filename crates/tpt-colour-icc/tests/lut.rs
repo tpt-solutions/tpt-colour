@@ -215,6 +215,40 @@ fn max_component_error(a: [f32; 3], b: [f32; 3]) -> f32 {
     (0..3).map(|i| (a[i] - b[i]).abs()).fold(0.0, f32::max)
 }
 
+/// A CMYK profile with an `A2B0` table and a `D2B0` (`mpet`) table, which is not supported.
+fn cmyk_profile_with_d2b0(grid: usize) -> IccProfile {
+    let a2b = sample_grid(4, grid, cmyk_to_lab_norm);
+    let bytes = assemble(
+        b"CMYK",
+        b"Lab ",
+        4,
+        &[
+            (*b"A2B0", mab_tag(b"mAB ", 4, 3, grid, &a2b)),
+            (*b"D2B0", vec![0_u8; 4]),
+        ],
+    );
+    IccProfile::parse(&bytes).expect("CMYK profile with D2B0 parses")
+}
+
+#[test]
+fn d2b_intent_is_refused_rather_than_read_from_a2b() {
+    // The reference readers use D2B in preference to A2B, so A2B alone would give a different answer.
+    let profile = cmyk_profile_with_d2b0(5);
+    assert_eq!(
+        ColourTransform::new(&profile, &IccProfile::srgb(), RenderingIntent::Perceptual).err(),
+        Some(IccError::Unsupported)
+    );
+    // Relative has no D2B1, so it falls back to A2B0, as LittleCMS does.
+    assert!(
+        ColourTransform::new(
+            &profile,
+            &IccProfile::srgb(),
+            RenderingIntent::RelativeColorimetric
+        )
+        .is_ok()
+    );
+}
+
 #[test]
 fn cmyk_profile_parses_with_expected_channels() {
     let p = cmyk_profile(5);
@@ -272,7 +306,9 @@ fn milestone_cmyk_round_trip_through_lab() {
 fn a2b_pipeline(profile: &IccProfile) -> &tpt_colour_icc::Pipeline {
     match &profile.model {
         tpt_colour_icc::ProfileModel::Lut(t) => t.a2b(RenderingIntent::Perceptual).unwrap(),
-        tpt_colour_icc::ProfileModel::Matrix(_) => panic!("expected a LUT profile"),
+        tpt_colour_icc::ProfileModel::Matrix(_) | tpt_colour_icc::ProfileModel::Gray(_) => {
+            panic!("expected a LUT profile")
+        }
     }
 }
 
@@ -352,18 +388,23 @@ fn lut_profile_rejects_wrong_channel_counts() {
     assert_eq!(t.dst_channels(), 3);
 }
 
+/// The official sRGB v2 matrix profile. A v2 destination gets no implicit black point
+/// compensation, so it is the right baseline for comparisons that must not compensate.
+fn srgb_v2() -> IccProfile {
+    IccProfile::parse(include_bytes!(
+        "../../tpt-colour-oracle/tests/profiles/sRGB2014.icc"
+    ))
+    .unwrap()
+}
+
 #[test]
 fn missing_intent_table_falls_back_to_perceptual() {
     // The test profile only has A2B0, so relative colorimetric must use it, as the ICC does.
     let profile = cmyk_profile(5);
-    let relative = ColourTransform::new(
-        &profile,
-        &IccProfile::srgb(),
-        RenderingIntent::RelativeColorimetric,
-    )
-    .unwrap();
+    let relative =
+        ColourTransform::new(&profile, &srgb_v2(), RenderingIntent::RelativeColorimetric).unwrap();
     let perceptual =
-        ColourTransform::new(&profile, &IccProfile::srgb(), RenderingIntent::Perceptual).unwrap();
+        ColourTransform::new(&profile, &srgb_v2(), RenderingIntent::Perceptual).unwrap();
     let cmyk = [0.2_f32, 0.3, 0.4, 0.1];
     let mut x = [0.0_f32; 3];
     let mut y = [0.0_f32; 3];
@@ -393,7 +434,7 @@ fn black_point_compensation_lifts_black_to_destination_black() {
         lab
     };
     let a2b = sample_grid(4, 9, lifted);
-    // Version 2, so the uncompensated baseline is not implicitly compensated (see `ColourTransform::new`).
+    // The v2 destination is not implicitly compensated, so `new` gives the uncompensated baseline.
     let bytes = assemble(
         b"CMYK",
         b"Lab ",
@@ -402,7 +443,7 @@ fn black_point_compensation_lifts_black_to_destination_black() {
     );
     let profile = IccProfile::parse(&bytes).unwrap();
     let black = [0.0_f32, 0.0, 0.0, 1.0];
-    let srgb = IccProfile::srgb();
+    let srgb = srgb_v2();
 
     let mut plain = [0.0_f32; 3];
     ColourTransform::new(&profile, &srgb, RenderingIntent::Perceptual)
@@ -506,7 +547,13 @@ fn oversized_clut_is_rejected_before_allocation() {
     t.truncate(32);
     t.extend(clut);
     let bytes = assemble(b"CMYK", b"Lab ", 4, &[(*b"A2B0", t)]);
-    assert!(IccProfile::parse(&bytes).is_err());
+    // The bad table is dropped, so the profile still parses, but its intent cannot be used.
+    let profile = IccProfile::parse(&bytes).expect("a bad table must not fail the parse");
+    let srgb = IccProfile::srgb();
+    assert_eq!(
+        ColourTransform::new(&profile, &srgb, RenderingIntent::Perceptual).err(),
+        Some(IccError::Unsupported)
+    );
 }
 
 #[test]
@@ -547,5 +594,47 @@ fn mpet_is_unsupported() {
     let mut t = vec![0_u8; 40];
     t[0..4].copy_from_slice(b"mpet");
     let bytes = assemble(b"CMYK", b"Lab ", 4, &[(*b"A2B0", t)]);
+    let profile = IccProfile::parse(&bytes).unwrap();
+    assert_eq!(
+        ColourTransform::new(&profile, &IccProfile::srgb(), RenderingIntent::Perceptual).err(),
+        Some(IccError::Unsupported)
+    );
+}
+
+#[test]
+fn unused_bad_tag_does_not_fail_the_parse() {
+    // A broken B2A table next to a good A2B0 must not stop the profile from loading.
+    let mut bad = vec![0_u8; 40];
+    bad[0..4].copy_from_slice(b"mAB ");
+    let bytes = assemble(
+        b"CMYK",
+        b"Lab ",
+        4,
+        &[
+            (*b"A2B0", mab_tag(b"mAB ", 4, 3, 3, &vec![0.5; 81 * 3])),
+            (*b"B2A1", bad),
+        ],
+    );
+    let profile = IccProfile::parse(&bytes).expect("unused bad tag must not fail the parse");
+    assert!(
+        ColourTransform::new(&profile, &IccProfile::srgb(), RenderingIntent::Perceptual).is_ok()
+    );
+}
+
+#[test]
+fn profile_wide_clut_budget_is_enforced() {
+    // Three 3-in, grid-100, 3-out tables hold 9 M samples in total. Each is under the per-table
+    // cap, but together they exceed the per-profile budget.
+    let table = || mab_tag(b"mAB ", 3, 3, 100, &vec![0.5; 100 * 100 * 100 * 3]);
+    let bytes = assemble(
+        b"RGB ",
+        b"Lab ",
+        4,
+        &[
+            (*b"A2B0", table()),
+            (*b"A2B1", table()),
+            (*b"A2B2", table()),
+        ],
+    );
     assert_eq!(IccProfile::parse(&bytes).err(), Some(IccError::Unsupported));
 }

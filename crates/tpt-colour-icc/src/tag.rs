@@ -109,7 +109,7 @@ fn curv(body: &[u8]) -> Result<Trc, IccError> {
             for i in 0..n {
                 samples.push(f32::from(u16_at(body, 12 + i * 2)?) / 65_535.0);
             }
-            Ok(Trc::Table(samples))
+            Ok(Trc::sampled(samples))
         }
     }
 }

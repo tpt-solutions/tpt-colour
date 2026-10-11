@@ -12,9 +12,9 @@ bit-identical output and needs Rust 1.95; the default build keeps the 1.85 MSRV.
 
 | Crate | Purpose |
 | --- | --- |
-| `tpt-colour-core` | Colour spaces, chromatic adaptation, YCbCr, and Porter-Duff / blend compositing |
-| `tpt-colour-icc` | ICC profiles (v2/v4): matrix/TRC and LUT (`mft1`, `mft2`, `mAB `, `mBA `) transforms, black point compensation |
-| `tpt-colour-manage` | Gamut boundaries, CSS Colour 4 OKLCH gamut mapping, `ColourManager` with transform caching, HDR tone mapping |
+| `tpt-colour-core` | Colour spaces (sRGB, P3, Rec. 2020, Adobe RGB, Lab, Oklab, YCbCr), HSL/HSV/HWB/xyY, ΔE formulas, WCAG contrast, hex parsing, gradients, and Porter-Duff / blend compositing |
+| `tpt-colour-icc` | ICC profiles (v2/v4): matrix/TRC and LUT (`mft1`, `mft2`, `mAB `, `mBA `) transforms, black point compensation, absolute colorimetric |
+| `tpt-colour-manage` | Gamut boundaries, CSS Colour 4 OKLCH gamut mapping, `ColourManager` with transform caching, HDR tone mapping (PQ, HLG, Reinhard) |
 | `tpt-colour` | Facade crate that re-exports the above |
 
 `tpt-colour-oracle` compares output against LittleCMS. It is excluded from the
@@ -41,7 +41,8 @@ Run the example with `cargo run -p tpt-colour --example convert`.
 - **Deterministic maths.** Operations keep a fixed order, avoid FMA, and use `libm`
   rather than platform `std` maths, so results match bit-for-bit across targets.
 - **Precision.** Bulk transforms use f32 with curves baked into 4096-point tables, which
-  is accurate to about 2e-5. Single-colour matrix/TRC transforms use exact f64 curves.
+  is accurate to about 2e-5. Pure power curves stay analytic, because a table is off by about
+  1.6 codes near black. Single-colour matrix/TRC transforms use exact f64 curves.
 - **No `unsafe`.** `unsafe_code` is forbidden at the workspace level.
 - **Bounded parsing.** Malformed or hostile ICC data returns an error. It never panics or allocates without limit.
 
@@ -51,10 +52,16 @@ Run the example with `cargo run -p tpt-colour --example convert`.
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
-cargo check --workspace --target thumbv7em-none-eabihf   # no_std check
+cargo check --workspace --exclude tpt-colour-cli --target thumbv7em-none-eabihf   # no_std check (the CLI is std)
 cargo deny check
 cargo test --workspace --features tpt-colour/simd   # needs Rust 1.95
+RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps
 ```
+
+Cookbook examples live in `crates/tpt-colour/examples/`. List them with `cargo run -p tpt-colour --example`.
+
+Release notes are in [CHANGELOG.md](CHANGELOG.md). Contribution rules are in
+[CONTRIBUTING.md](CONTRIBUTING.md), and vulnerability reports are in [SECURITY.md](SECURITY.md).
 
 The design is in [spec.txt](spec.txt) and the work plan in [TODO.md](TODO.md).
 

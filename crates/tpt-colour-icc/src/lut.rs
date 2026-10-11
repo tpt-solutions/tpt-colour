@@ -17,6 +17,11 @@ pub(crate) const MAX_CHANNELS: usize = 15;
 const MAX_STAGES: usize = 8;
 /// Upper bound on CLUT samples (grid points × output channels).
 pub(crate) const MAX_CLUT_VALUES: usize = 1 << 22;
+/// Most CLUT inputs supported. Multilinear lookup touches 2^n corners per pixel, so n is capped
+/// to keep the work per pixel bounded. Three inputs use tetrahedral interpolation.
+pub(crate) const MAX_CLUT_INPUTS: usize = 8;
+/// Upper bound on CLUT samples across all tables in one profile (32 MiB of `f32`).
+pub(crate) const MAX_PROFILE_CLUT_VALUES: usize = 1 << 23;
 
 /// One step in a pipeline.
 #[derive(Clone, Debug, PartialEq)]
@@ -82,6 +87,17 @@ impl Pipeline {
         self.output
     }
 
+    /// Total CLUT samples held by this pipeline, used to enforce the per-profile budget.
+    pub(crate) fn clut_values(&self) -> usize {
+        self.stages
+            .iter()
+            .map(|stage| match stage {
+                Stage::Clut(clut) => clut.values.len(),
+                _ => 0,
+            })
+            .sum()
+    }
+
     /// Lab encoding used when this pipeline's output is in a Lab PCS.
     pub(crate) fn encoding(&self) -> LabEncoding {
         self.encoding
@@ -100,22 +116,27 @@ impl Pipeline {
         }
         let mut buf = [0.0_f32; MAX_CHANNELS];
         for (dst, &src) in buf.iter_mut().zip(input) {
-            *dst = src.clamp(0.0, 1.0);
+            *dst = unit(src);
         }
         for stage in &self.stages {
             match stage {
                 Stage::Curves(curves) => {
                     for (v, curve) in buf.iter_mut().zip(curves) {
-                        *v = curve.eval(*v);
+                        *v = not_nan(curve.eval(*v));
                     }
                 }
                 Stage::Matrix { m, offset } => {
                     let v = mul_vec(m, [buf[0], buf[1], buf[2]]);
-                    buf[0] = v[0] + offset[0];
-                    buf[1] = v[1] + offset[1];
-                    buf[2] = v[2] + offset[2];
+                    buf[0] = not_nan(v[0] + offset[0]);
+                    buf[1] = not_nan(v[1] + offset[1]);
+                    buf[2] = not_nan(v[2] + offset[2]);
                 }
                 Stage::Clut(clut) => {
+                    // Curve outputs can leave [0, 1]. Clamp them as LittleCMS does, rather than
+                    // extrapolating past the grid.
+                    for v in &mut buf[..clut.in_ch] {
+                        *v = unit(*v);
+                    }
                     let mut tmp = [0.0_f32; MAX_CHANNELS];
                     clut.eval(&buf[..clut.in_ch], &mut tmp[..clut.out_ch]);
                     buf[..clut.out_ch].copy_from_slice(&tmp[..clut.out_ch]);
@@ -123,7 +144,7 @@ impl Pipeline {
             }
         }
         for (dst, &src) in output.iter_mut().zip(&buf) {
-            *dst = src.clamp(0.0, 1.0);
+            *dst = unit(src);
         }
         Ok(())
     }
@@ -170,9 +191,10 @@ impl Pipeline {
         let mut index = 0_usize;
         let mut point = [0_usize; MAX_CHANNELS];
         for d in 0..clut.in_ch {
-            let pos = coords[d] * (clut.grid[d] - 1) as f32;
+            // Curve outputs are not guaranteed to stay in [0, 1], and the node must be in the grid.
+            let pos = coords[d].clamp(0.0, 1.0) * (clut.grid[d] - 1) as f32;
             let node = (pos + 0.5) as usize;
-            if (pos - node as f32).abs() > 1e-4 {
+            if node >= clut.grid[d] || (pos - node as f32).abs() > 1e-4 {
                 return None;
             }
             point[d] = node;
@@ -195,9 +217,23 @@ impl Pipeline {
             return None;
         };
         let start = index * clut.out_ch;
-        clut.values[start..start + 3].copy_from_slice(&target);
+        clut.values
+            .get_mut(start..start + 3)?
+            .copy_from_slice(&target);
         Some(patched)
     }
+}
+
+/// Clamps to `[0, 1]`, with NaN mapped to 0 so it cannot leak into the output.
+///
+/// `f32::clamp` passes NaN through, which would otherwise reach the caller.
+fn unit(v: f32) -> f32 {
+    not_nan(v).clamp(0.0, 1.0)
+}
+
+/// Replaces NaN with 0 and leaves every other value unchanged.
+fn not_nan(v: f32) -> f32 {
+    if v.is_nan() { 0.0 } else { v }
 }
 
 /// An n-dimensional lookup table. The first input varies slowest, and outputs are contiguous.
@@ -212,11 +248,17 @@ pub(crate) struct Clut {
 impl Clut {
     /// Number of samples a CLUT with this grid and output count holds.
     ///
+    /// Malformed grids (empty, a side under two points) are `BadTag`. Valid grids beyond the
+    /// input or sample limits are `Unsupported`, so callers can tell the two apart.
+    ///
     /// Checked before any table data is read, so a hostile grid size cannot cause a large
     /// allocation or an overflow.
     pub(crate) fn sample_count(grid: &[usize], out_ch: usize) -> Result<usize, IccError> {
         if grid.is_empty() || grid.len() > MAX_CHANNELS || out_ch == 0 || out_ch > MAX_CHANNELS {
             return Err(IccError::BadTag);
+        }
+        if grid.len() > MAX_CLUT_INPUTS {
+            return Err(IccError::Unsupported);
         }
         let mut points: usize = 1;
         for &g in grid {
@@ -337,5 +379,61 @@ impl Clut {
             let coords = [base[0] + off[0], base[1] + off[1], base[2] + off[2]];
             self.accumulate(self.index(&coords), w, out);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A 1-in, 3-out pipeline whose input curve overshoots `[0, 1]` (`y = 1.5x`), so device white
+    /// maps to 1.5. Before the clamp, the node index was 3 on a grid of 3 and panicked.
+    fn overshooting_pipeline() -> Pipeline {
+        let overshoot = Trc::Parametric {
+            function: 1,
+            params: [1.0, 1.5, 0.0, 0.0, 0.0, 0.0, 0.0],
+        };
+        let stages = alloc::vec![
+            Stage::Curves(alloc::vec![overshoot]),
+            Stage::Clut(Clut::new(alloc::vec![3], 3, alloc::vec![0.0; 9]).unwrap()),
+            Stage::Curves(alloc::vec![Trc::Identity; 3]),
+        ];
+        Pipeline::new(1, stages, LabEncoding::V4).unwrap()
+    }
+
+    #[test]
+    fn white_patch_survives_curve_output_outside_unit_range() {
+        let pipeline = overshooting_pipeline();
+        let pcs_white = [0.5, 0.25, 0.75];
+        let patched = pipeline
+            .with_white_patched(&[1.0], pcs_white)
+            .expect("white is off target, so a patch is needed");
+        let mut out = [0.0_f32; 3];
+        patched.eval(&[1.0], &mut out).unwrap();
+        for (got, want) in out.iter().zip(pcs_white) {
+            assert!((got - want).abs() <= 1e-4, "got {got}, want {want}");
+        }
+    }
+
+    #[test]
+    fn white_patch_is_skipped_when_white_already_matches() {
+        let pipeline = overshooting_pipeline();
+        assert!(
+            pipeline
+                .with_white_patched(&[1.0], [0.0, 0.0, 0.0])
+                .is_none()
+        );
+    }
+}
+
+#[cfg(test)]
+mod cap_tests {
+    use super::*;
+
+    #[test]
+    fn too_many_inputs_is_unsupported_not_malformed() {
+        assert_eq!(Clut::sample_count(&[2; 9], 3), Err(IccError::Unsupported));
+        assert_eq!(Clut::sample_count(&[2; 8], 3), Ok(256 * 3));
+        assert_eq!(Clut::sample_count(&[1, 2], 3), Err(IccError::BadTag));
     }
 }

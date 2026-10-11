@@ -231,12 +231,66 @@ fn tone_map_keeps_chromaticity_and_stays_in_range() {
     let (x0, y0) = chroma(xyz);
     let (x1, y1) = chroma(out);
     assert!((x0 - x1).abs() < 1e-5 && (y0 - y1).abs() < 1e-5);
-    assert!(out.iter().all(|v| (0.0..=1.0).contains(v)));
+    assert!((0.0..=1.0).contains(&out[1]));
     assert_near(tone_map_xyz([0.0; 3], 4.0), [0.0; 3], 0.0);
     assert!((tone_map_xyz([50.0, 100.0, 40.0], 4.0)[1] - 1.0).abs() < 1e-6);
 }
 
 #[test]
+fn tone_map_clip_keeps_chromaticity_of_white() {
+    // D65 white at a luminance far above `white`. Y clips to 1, and X:Z must not move.
+    let white_d65 = [0.950_47_f32, 1.0, 1.088_83].map(|v| v * 50.0);
+    let out = tone_map_xyz(white_d65, 4.0);
+    assert!((out[1] - 1.0).abs() < 1e-6, "{out:?}");
+    assert!(
+        (out[0] / out[2] - 0.950_47 / 1.088_83).abs() < 1e-5,
+        "{out:?}"
+    );
+}
+
+#[test]
 fn white_and_d50_are_consistent_across_adaptation() {
     assert_near(d65_to_d50(d50_to_d65(D50)), D50, 1e-4);
+}
+
+#[test]
+fn tone_mapping_handles_nan_and_degenerate_white() {
+    assert!(reinhard_extended(f32::NAN, 4.0).abs() < 1e-9);
+    assert!(reinhard_extended(1.0, f32::NAN).is_finite());
+    assert!(
+        (reinhard_extended(1.0, f32::NAN) - 0.5).abs() < 1e-6,
+        "plain Reinhard"
+    );
+    assert!(
+        (reinhard_extended(1.0, 0.0) - 0.5).abs() < 1e-6,
+        "plain Reinhard"
+    );
+    assert_near(tone_map_xyz([f32::NAN, 1.0, 1.0], 4.0), [0.0; 3], 1e-9);
+    assert_near(tone_map_xyz([f32::INFINITY, 1.0, 1.0], 4.0), [0.0; 3], 1e-9);
+    assert!(
+        tone_map_xyz([0.2, 0.3, 0.1], f32::NAN)
+            .iter()
+            .all(|v| v.is_finite())
+    );
+}
+
+#[test]
+fn map_to_gamut_maps_nan_to_black_and_stays_in_gamut() {
+    let target = Gamut::srgb();
+    assert_near(map_to_gamut(&target, [f32::NAN, 0.2, 0.3]), [0.0; 3], 1e-9);
+    // Out-of-gamut P3 green, mapped perceptually, must land inside the sRGB boundary.
+    let mapped = map_to_gamut(&target, p3_green_xyz());
+    assert!(target.contains(mapped), "{mapped:?}");
+}
+
+#[test]
+fn hlg_round_trips_and_hits_its_knee() {
+    use tpt_colour_manage::tone::{hlg_eotf, hlg_oetf};
+    // The OETF meets 0.5 at scene 1/12, where the two branches join.
+    assert!((hlg_oetf(1.0 / 12.0) - 0.5).abs() < 1e-5);
+    assert!((hlg_oetf(1.0) - 1.0).abs() < 1e-4);
+    for i in 0..=20 {
+        let e = i as f32 / 20.0;
+        assert!((hlg_eotf(hlg_oetf(e)) - e).abs() < 1e-4, "scene {e}");
+    }
 }
