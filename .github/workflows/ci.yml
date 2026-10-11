@@ -184,7 +184,7 @@ jobs:
         shell: bash
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - uses: dtolnay/rust-toolchain@stable
@@ -222,7 +222,7 @@ jobs:
         run: |
           cbindgen --config cbindgen.toml --crate tpt-colour-capi --output include/tpt_colour.h
           git diff --exit-code -- include/tpt_colour.h
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - name: Call the library through ctypes
