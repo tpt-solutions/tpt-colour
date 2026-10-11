@@ -7,8 +7,8 @@ license.workspace = true
 description = "Colour spaces, chromatic adaptation, colour difference, and alpha compositing (no_std)"
 readme = "README.md"
 repository.workspace = true
-keywords.workspace = true
-categories.workspace = true
+keywords = ["colour", "color", "oklab", "wcag", "compositing"]
+categories = ["graphics", "no-std"]
 
 [package.metadata.docs.rs]
 rustdoc-args = ["--cfg", "docsrs"]

@@ -7,6 +7,9 @@ license.workspace = true
 description = "Command-line tool for inspecting ICC profiles, converting colours, and checking gamut"
 # Not published yet. Remove this line when the CLI is ready for crates.io.
 publish = false
+readme = "README.md"
+keywords = ["icc", "colour", "color-profile", "cli", "gamut"]
+categories = ["command-line-utilities", "graphics"]
 
 [[bin]]
 name = "tpt-colour"

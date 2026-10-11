@@ -10,15 +10,20 @@ bit-identical output and needs Rust 1.95; the default build keeps the 1.85 MSRV.
 
 ## Crates
 
-| Crate | Purpose |
-| --- | --- |
-| `tpt-colour-core` | Colour spaces (sRGB, P3, Rec. 2020, Adobe RGB, Lab, Oklab, YCbCr), HSL/HSV/HWB/xyY, ΔE formulas, WCAG contrast, hex parsing, gradients, and Porter-Duff / blend compositing |
-| `tpt-colour-icc` | ICC profiles (v2/v4): matrix/TRC and LUT (`mft1`, `mft2`, `mAB `, `mBA `) transforms, black point compensation, absolute colorimetric |
-| `tpt-colour-manage` | Gamut boundaries, CSS Colour 4 OKLCH gamut mapping, `ColourManager` with transform caching, HDR tone mapping (PQ, HLG, Reinhard) |
-| `tpt-colour` | Facade crate that re-exports the above |
+Each crate has its own README, changelog and examples.
 
-`tpt-colour-oracle` compares output against LittleCMS. It is excluded from the
-workspace and never shipped.
+| Crate | Purpose | Docs |
+| --- | --- | --- |
+| [`tpt-colour`](crates/tpt-colour) | Facade crate that re-exports the others. Start here. | [README](crates/tpt-colour/README.md) · [examples](crates/tpt-colour/examples) |
+| [`tpt-colour-core`](crates/tpt-colour-core) | Colour spaces (sRGB, P3, Rec. 2020, Adobe RGB, Lab, Oklab, YCbCr), HSL/HSV/HWB/xyY, ΔE formulas, WCAG and APCA contrast, palettes, colour-vision simulation, and Porter-Duff / blend compositing | [README](crates/tpt-colour-core/README.md) · [examples](crates/tpt-colour-core/examples) |
+| [`tpt-colour-icc`](crates/tpt-colour-icc) | ICC profiles (v2/v4): matrix/TRC and LUT (`mft1`, `mft2`, `mAB `, `mBA `) transforms, writing, black point compensation, absolute colorimetric | [README](crates/tpt-colour-icc/README.md) · [examples](crates/tpt-colour-icc/examples) |
+| [`tpt-colour-manage`](crates/tpt-colour-manage) | Gamut boundaries, CSS Colour 4 OKLCH gamut mapping, `ColourManager` with transform caching, soft proofing, HDR tone mapping (PQ, HLG, Reinhard) | [README](crates/tpt-colour-manage/README.md) · [examples](crates/tpt-colour-manage/examples) |
+
+Tools and bindings, not published: [`tpt-colour-cli`](crates/tpt-colour-cli/README.md) (the
+`tpt-colour` command), [`tpt-colour-wasm`](crates/tpt-colour-wasm/README.md),
+[`tpt-colour-capi`](crates/tpt-colour-capi/README.md) and
+[`tpt-colour-py`](crates/tpt-colour-py/README.md). `tpt-colour-oracle` compares output against
+LittleCMS. It is excluded from the workspace and never shipped.
 
 ## Quick start
 
@@ -33,7 +38,9 @@ let to_print = colour.transform("srgb", "fogra39", RenderingIntent::Perceptual)?
 let cmyk = to_print.transform_rgb([0.8, 0.2, 0.1])?;
 ```
 
-Run the example with `cargo run -p tpt-colour --example convert`.
+Run the example with `cargo run -p tpt-colour --example convert`. The
+[crate README](crates/tpt-colour/README.md) lists all the examples, and the
+[mdBook guide](docs/book/src/introduction.md) explains the design choices behind them.
 
 ## Principles
 
@@ -58,7 +65,7 @@ cargo test --workspace --features tpt-colour/simd   # needs Rust 1.95
 RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps
 ```
 
-Cookbook examples live in `crates/tpt-colour/examples/`. List them with `cargo run -p tpt-colour --example`.
+Examples live in each crate's `examples/` folder. List the facade's with `cargo run -p tpt-colour --example`.
 
 Release notes are in [CHANGELOG.md](CHANGELOG.md). Contribution rules are in
 [CONTRIBUTING.md](CONTRIBUTING.md), and vulnerability reports are in [SECURITY.md](SECURITY.md).

@@ -7,8 +7,8 @@ license.workspace = true
 description = "ICC profile parsing and colour transforms for matrix/TRC and LUT profiles (no_std with alloc)"
 readme = "README.md"
 repository.workspace = true
-keywords.workspace = true
-categories.workspace = true
+keywords = ["icc", "colour", "color-profile", "colour-management", "lut"]
+categories = ["graphics", "multimedia::images", "parser-implementations", "no-std"]
 
 [package.metadata.docs.rs]
 rustdoc-args = ["--cfg", "docsrs"]

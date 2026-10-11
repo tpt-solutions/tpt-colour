@@ -7,6 +7,9 @@ license = "MIT OR Apache-2.0"
 description = "Python bindings (PyO3) for tpt-colour"
 repository = "https://github.com/tpt-solutions/tpt-colour"
 publish = false
+readme = "README.md"
+keywords = ["colour", "python", "pyo3", "icc", "bindings"]
+categories = ["graphics", "api-bindings"]
 
 # Built with maturin, not as part of the workspace: PyO3 links against the Python interpreter.
 # Build a wheel with `maturin build --release` from this directory.

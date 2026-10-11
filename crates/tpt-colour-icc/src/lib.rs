@@ -4,6 +4,22 @@
 //! for RGB, CMYK and grey data, in ICC v2 and v4. `multiProcessElements` (`mpet`) is out
 //! of scope for v1.0. Parsing is bounds-checked throughout: malformed input returns an
 //! error and never panics.
+//!
+//! # Example
+//!
+//! Build a transform between two built-in profiles and convert an sRGB colour.
+//!
+//! ```
+//! use tpt_colour_icc::{ColourTransform, IccProfile, RenderingIntent};
+//!
+//! let srgb = IccProfile::srgb();
+//! let p3 = IccProfile::display_p3();
+//! let transform = ColourTransform::new(&srgb, &p3, RenderingIntent::RelativeColorimetric)?;
+//!
+//! let out = transform.transform_rgb([1.0, 0.0, 0.0])?;
+//! assert!((out[0] - 234.0 / 255.0).abs() < 2e-3);
+//! # Ok::<(), tpt_colour_icc::IccError>(())
+//! ```
 #![no_std]
 extern crate alloc;
 

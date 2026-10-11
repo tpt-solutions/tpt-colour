@@ -7,6 +7,9 @@ license = "MIT OR Apache-2.0"
 description = "C ABI for tpt-colour, with a cbindgen header"
 repository = "https://github.com/tpt-solutions/tpt-colour"
 publish = false
+readme = "README.md"
+keywords = ["colour", "ffi", "c-api", "icc", "cbindgen"]
+categories = ["graphics", "api-bindings"]
 
 # Not part of the workspace: the C ABI needs `unsafe`, which the workspace forbids. Build with
 # `cargo build --release` here, and regenerate the header with cbindgen (see README.md).

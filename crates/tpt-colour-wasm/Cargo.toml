@@ -7,6 +7,9 @@ license.workspace = true
 description = "WebAssembly (wasm-bindgen) bindings for tpt-colour"
 repository.workspace = true
 publish = false
+readme = "README.md"
+keywords = ["colour", "wasm", "webassembly", "wasm-bindgen", "icc"]
+categories = ["wasm", "graphics"]
 
 [lib]
 crate-type = ["cdylib", "rlib"]
