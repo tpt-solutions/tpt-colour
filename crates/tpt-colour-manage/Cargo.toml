@@ -29,4 +29,4 @@ libm.workspace = true
 
 [dev-dependencies]
 # Decodes the golden PNG in tests only; never a dependency of shipped crates.
-png = "0.17"
+png = "0.18"
