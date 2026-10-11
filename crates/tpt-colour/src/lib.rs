@@ -25,7 +25,9 @@
 //! ```
 #![no_std]
 
-pub use tpt_colour_core::{composite, contrast, difference, hex, mix, models, space};
+pub use tpt_colour_core::{
+    composite, contrast, difference, hex, mix, models, parse, space, vision,
+};
 pub use tpt_colour_icc as icc;
 pub use tpt_colour_icc::RenderingIntent;
 pub use tpt_colour_manage as manage;

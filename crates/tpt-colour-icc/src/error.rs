@@ -19,6 +19,9 @@ pub enum IccError {
     Singular,
     /// A slice has the wrong number of channels for the profile or transform.
     ChannelCount,
+    /// An image buffer is too short for its width, height and stride, or the stride is shorter
+    /// than one row of pixels.
+    BufferLayout,
 }
 
 impl fmt::Display for IccError {
@@ -30,6 +33,7 @@ impl fmt::Display for IccError {
             Self::Unsupported => "ICC profile uses an unsupported feature",
             Self::Singular => "ICC colorant matrix is singular",
             Self::ChannelCount => "channel count does not match the profile",
+            Self::BufferLayout => "image buffer is too small for its width, height and stride",
         };
         f.write_str(msg)
     }

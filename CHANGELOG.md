@@ -14,6 +14,20 @@ appear in minor releases until 1.0.0.
 - `multiProcessElements` (`mpet`) tables are not read. Intents that need them report `Unsupported`.
 - Gamut mapping for LUT destination profiles is not done. Their own perceptual tables handle gamut compression.
 
+### Added
+
+- `tpt_colour_core::contrast::apca_contrast`: APCA 0.0.98G-4g lightness contrast, signed by polarity.
+- `tpt_colour_core::parse::parse_rgb_function`: `rgb()` and `rgba()` in comma and space syntax.
+- `tpt_colour_core::vision::simulate`: protanopia, deuteranopia and tritanopia simulation (Machado 2009).
+- `YCbCr::encode_limited` and `decode_limited` for studio-swing (16 to 235 / 16 to 240) code values.
+- `Display` and `FromStr` for `PorterDuff` and `BlendMode`. Parsing ignores ASCII case.
+- `tpt_colour_core::parse::parse_colour` and `parse_oklch`: `oklch()`, the 148 CSS named colours (`named_colour`) and `transparent`.
+- `tpt_colour_core::space::Luv` (CIE 1976 L*u*v*), and `ycocg_encode`/`ycocg_decode` (YCoCg, float form).
+- `tpt_colour_core::palette`: `hue_rotate`, `complement`, `analogous`, `triadic` and `split_complementary`, in Oklch with a chroma-reducing sRGB fit.
+- `tpt_colour_manage::SoftProof`: proofs a working-space colour through a proof profile (up to four channels) and flags out-of-gamut colours by ΔE₀₀.
+- `ColourTransform::describe()` and `tpt_colour_icc::Step`: the transform's stage graph.
+- `ColourTransform::transform_u16`, `transform_u8_image` and `transform_u16_image`. The image forms take a row stride and leave padding untouched. New error `IccError::BufferLayout`.
+
 ### Changed (breaking)
 
 - `tpt_colour_core::space::YCbCr` fields are private. Use `YCbCr::new` (validated, returns

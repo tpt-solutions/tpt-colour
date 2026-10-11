@@ -6,14 +6,19 @@
 mod adapt;
 mod cmyk;
 mod lab;
+mod luv;
 mod rgb;
 mod ycbcr;
+mod ycocg;
 
 pub use adapt::{d50_to_d65, d65_to_d50};
 pub use cmyk::Cmyk;
 pub use lab::{Lab, Lch, Oklab, Oklch};
+pub use luv::Luv;
 pub use rgb::{AdobeRgb, DisplayP3, LinearSRgb, ProPhotoRgb, Rec2020, SRgb};
+pub(crate) use rgb::{srgb_eotf, srgb_oetf};
 pub use ycbcr::YCbCr;
+pub use ycocg::{ycocg_decode, ycocg_encode};
 
 /// D65 reference white (relative XYZ, `Y = 1`).
 pub const D65: [f32; 3] = [0.950_47, 1.0, 1.088_83];

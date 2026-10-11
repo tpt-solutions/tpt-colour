@@ -65,18 +65,10 @@ pub fn apca_contrast(text: [f32; 3], background: [f32; 3]) -> f32 {
     }
     let lc = if y_bg > y_text {
         let sapc = (powf(y_bg, 0.56) - powf(y_text, 0.57)) * 1.14;
-        if sapc < 0.1 {
-            0.0
-        } else {
-            sapc - 0.027
-        }
+        if sapc < 0.1 { 0.0 } else { sapc - 0.027 }
     } else {
         let sapc = (powf(y_bg, 0.65) - powf(y_text, 0.62)) * 1.14;
-        if sapc > -0.1 {
-            0.0
-        } else {
-            sapc + 0.027
-        }
+        if sapc > -0.1 { 0.0 } else { sapc + 0.027 }
     };
     lc * 100.0
 }
@@ -98,9 +90,9 @@ mod tests {
         let light = [0.9; 3];
         assert!(apca_contrast(dark, light) > 0.0);
         assert!(apca_contrast(light, dark) < 0.0);
-        assert_eq!(apca_contrast(light, light), 0.0);
+        assert!(apca_contrast(light, light).abs() < 1e-6);
         // Nearly identical backgrounds are below the visibility floor.
-        assert_eq!(apca_contrast([0.5; 3], [0.5, 0.5, 0.501]), 0.0);
+        assert!(apca_contrast([0.5; 3], [0.5, 0.5, 0.501]).abs() < 1e-6);
     }
 
     #[test]

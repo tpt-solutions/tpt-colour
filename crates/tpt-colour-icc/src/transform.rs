@@ -116,7 +116,7 @@ impl Backward {
 
 /// Black points (XYZ, D50) of the source and destination, for black point compensation.
 #[derive(Clone, Copy, Debug, PartialEq)]
-struct BlackPoints {
+pub(crate) struct BlackPoints {
     src: [f32; 3],
     dst: [f32; 3],
 }
@@ -127,11 +127,11 @@ struct BlackPoints {
 /// arithmetic per channel.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ColourTransform {
-    forward: Forward,
-    backward: Backward,
-    black: Option<BlackPoints>,
+    pub(crate) forward: Forward,
+    pub(crate) backward: Backward,
+    pub(crate) black: Option<BlackPoints>,
     /// Per-axis ratio of source to destination media white, for absolute colorimetric only.
-    abs_scale: Option<[f32; 3]>,
+    pub(crate) abs_scale: Option<[f32; 3]>,
     intent: RenderingIntent,
     exact: Option<ExactMatrix>,
 }
@@ -492,6 +492,78 @@ impl ColourTransform {
         Ok(())
     }
 
+    /// Transforms interleaved 16-bit pixels in place: `channels` is 3 (RGB) or 4 (RGBA).
+    ///
+    /// This is the 16-bit counterpart of [`ColourTransform::transform_u8`]. Values are scaled by
+    /// 65535 and rounded back. Alpha is left unchanged.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`IccError::ChannelCount`] under the same conditions as `transform_u8`.
+    pub fn transform_u16(&self, pixels: &mut [u16], channels: usize) -> Result<(), IccError> {
+        if !(channels == 3 || channels == 4)
+            || pixels.len() % channels != 0
+            || self.src_channels() != 3
+            || self.dst_channels() != 3
+        {
+            return Err(IccError::ChannelCount);
+        }
+        for px in pixels.chunks_exact_mut(channels) {
+            let input =
+                [f32::from(px[0]), f32::from(px[1]), f32::from(px[2])].map(|v| v / 65_535.0);
+            let mut out = [0.0_f32; 3];
+            self.transform(&input, &mut out)?;
+            for (dst, v) in px.iter_mut().zip(out) {
+                *dst = libm::roundf(v.clamp(0.0, 1.0) * 65_535.0) as u16;
+            }
+        }
+        Ok(())
+    }
+
+    /// Transforms an 8-bit image in place, where each row starts `stride` elements after the
+    /// previous one.
+    ///
+    /// `width` and `height` are in pixels, and `stride` is in `u8` elements. Padding between rows
+    /// (`stride - width * channels` elements) is never read or written, so sub-images and
+    /// padded frame buffers work. Alpha is left unchanged.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`IccError::BufferLayout`] if `stride` is shorter than one row, or if `pixels` is
+    /// shorter than `(height - 1) * stride + width * channels`. Returns
+    /// [`IccError::ChannelCount`] under the same conditions as `transform_u8`.
+    pub fn transform_u8_image(
+        &self,
+        pixels: &mut [u8],
+        width: usize,
+        height: usize,
+        stride: usize,
+        channels: usize,
+    ) -> Result<(), IccError> {
+        for_each_row(pixels, width, height, stride, channels, |row| {
+            self.transform_u8(row, channels)
+        })
+    }
+
+    /// Transforms a 16-bit image in place. The layout rules are those of
+    /// [`ColourTransform::transform_u8_image`], with `stride` in `u16` elements.
+    ///
+    /// # Errors
+    ///
+    /// Returns the same errors as [`ColourTransform::transform_u8_image`].
+    pub fn transform_u16_image(
+        &self,
+        pixels: &mut [u16],
+        width: usize,
+        height: usize,
+        stride: usize,
+        channels: usize,
+    ) -> Result<(), IccError> {
+        for_each_row(pixels, width, height, stride, channels, |row| {
+            self.transform_u16(row, channels)
+        })
+    }
+
     /// Transforms RGBA-sized pixels in place, reading the first `src_channels` components and
     /// writing the first `dst_channels`. Components beyond the destination are left unchanged,
     /// so the fourth component stays as alpha for RGB output.
@@ -680,4 +752,38 @@ fn white_patched(pipeline: Pipeline, profile: &IccProfile, intent: RenderingInte
     pipeline
         .with_white_patched(&device_white[..profile.device_channels], pcs_white)
         .unwrap_or(pipeline)
+}
+
+/// Calls `f` on each row of an image laid out with `stride` elements per row. Only the
+/// `width * channels` elements of each row are passed to `f`, so padding is untouched.
+fn for_each_row<T>(
+    pixels: &mut [T],
+    width: usize,
+    height: usize,
+    stride: usize,
+    channels: usize,
+    mut f: impl FnMut(&mut [T]) -> Result<(), IccError>,
+) -> Result<(), IccError> {
+    if channels != 3 && channels != 4 {
+        return Err(IccError::ChannelCount);
+    }
+    if height == 0 || width == 0 {
+        return Ok(());
+    }
+    let row_len = width.checked_mul(channels).ok_or(IccError::BufferLayout)?;
+    if stride < row_len {
+        return Err(IccError::BufferLayout);
+    }
+    let needed = (height - 1)
+        .checked_mul(stride)
+        .and_then(|offset| offset.checked_add(row_len))
+        .ok_or(IccError::BufferLayout)?;
+    if pixels.len() < needed {
+        return Err(IccError::BufferLayout);
+    }
+    for row in 0..height {
+        let start = row * stride;
+        f(&mut pixels[start..start + row_len])?;
+    }
+    Ok(())
 }

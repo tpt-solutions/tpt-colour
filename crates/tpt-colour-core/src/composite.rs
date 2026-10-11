@@ -136,6 +136,80 @@ impl PorterDuff {
     }
 }
 
+/// Error from parsing a Porter-Duff or blend mode name.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ParseNameError;
+
+impl core::fmt::Display for ParseNameError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str("unknown compositing or blend mode name")
+    }
+}
+
+impl core::error::Error for ParseNameError {}
+
+/// Implements `Display` (the lowercase kebab-case name) and `FromStr` (ignoring ASCII case) from
+/// one table, so the two cannot drift apart. Uses no `alloc`.
+macro_rules! named_enum {
+    ($ty:ident { $($variant:ident => $name:literal),+ $(,)? }) => {
+        impl core::fmt::Display for $ty {
+            fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+                let name = match self {
+                    $(Self::$variant => $name,)+
+                };
+                f.write_str(name)
+            }
+        }
+
+        impl core::str::FromStr for $ty {
+            type Err = ParseNameError;
+
+            fn from_str(s: &str) -> Result<Self, Self::Err> {
+                $(
+                    if s.eq_ignore_ascii_case($name) {
+                        return Ok(Self::$variant);
+                    }
+                )+
+                Err(ParseNameError)
+            }
+        }
+    };
+}
+
+named_enum!(PorterDuff {
+    Clear => "clear",
+    Source => "source",
+    Destination => "destination",
+    SourceOver => "source-over",
+    DestinationOver => "destination-over",
+    SourceIn => "source-in",
+    DestinationIn => "destination-in",
+    SourceOut => "source-out",
+    DestinationOut => "destination-out",
+    SourceAtop => "source-atop",
+    DestinationAtop => "destination-atop",
+    Xor => "xor",
+});
+
+named_enum!(BlendMode {
+    Normal => "normal",
+    Multiply => "multiply",
+    Screen => "screen",
+    Overlay => "overlay",
+    HardLight => "hard-light",
+    Darken => "darken",
+    Lighten => "lighten",
+    Difference => "difference",
+    Exclusion => "exclusion",
+    ColorDodge => "color-dodge",
+    ColorBurn => "color-burn",
+    SoftLight => "soft-light",
+    Hue => "hue",
+    Saturation => "saturation",
+    Color => "color",
+    Luminosity => "luminosity",
+});
+
 /// Source-over compositing of premultiplied `src` onto `dst`.
 #[must_use]
 pub fn blend_over(src: PremultipliedRgba, dst: PremultipliedRgba) -> PremultipliedRgba {
@@ -353,4 +427,36 @@ pub fn blend(mode: BlendMode, src: PremultipliedRgba, dst: PremultipliedRgba) ->
 /// `v` clamped to `[0, 1]`, with NaN mapped to 0.
 fn unit_or_zero(v: f32) -> f32 {
     if v.is_nan() { 0.0 } else { v.clamp(0.0, 1.0) }
+}
+
+#[cfg(test)]
+mod name_tests {
+    extern crate std;
+    use super::{BlendMode, ParseNameError, PorterDuff};
+    use std::string::ToString;
+
+    #[test]
+    fn names_round_trip_through_display_and_fromstr() {
+        for op in [PorterDuff::Clear, PorterDuff::SourceAtop, PorterDuff::Xor] {
+            assert_eq!(op.to_string().parse::<PorterDuff>(), Ok(op));
+        }
+        for mode in [
+            BlendMode::Normal,
+            BlendMode::HardLight,
+            BlendMode::Luminosity,
+        ] {
+            assert_eq!(mode.to_string().parse::<BlendMode>(), Ok(mode));
+        }
+    }
+
+    #[test]
+    fn parsing_ignores_ascii_case_and_rejects_unknown_names() {
+        assert_eq!(
+            "Source-Over".parse::<PorterDuff>(),
+            Ok(PorterDuff::SourceOver)
+        );
+        assert_eq!("MULTIPLY".parse::<BlendMode>(), Ok(BlendMode::Multiply));
+        assert_eq!("over".parse::<PorterDuff>(), Err(ParseNameError));
+        assert_eq!("multiply".parse::<PorterDuff>(), Err(ParseNameError));
+    }
 }

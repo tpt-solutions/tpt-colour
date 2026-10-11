@@ -114,31 +114,31 @@ Source: full-workspace review. Status key: `[x]` done, `[~]` partly done (the re
 - [~] `ColourManager::transform` has an allocation-free cache lookup (nested `&str` keys, so a hit allocates nothing). Still open: interior mutability (`RwLock` or sharding behind `std`), and an LRU cap.
 - [x] Pre-baked 3-D device-to-device CLUT: `ColourTransform::bake_clut(grid)`. Mean error is 0.3 codes at 33 points for P3 to sRGB. Still open: an allocation-free variant tuned for speed.
 - [x] `ManageError::source()` chains to the ICC error.
-- [~] `FromStr` for `RenderingIntent` is done. `#[non_exhaustive]` on `ManageError`, `PorterDuff`, `BlendMode` and `IccError`, and `Hash` on those types. `Display`/`FromStr` for the core enums, and an optional `serde` feature, are still open.
+- [~] `FromStr` for `RenderingIntent` is done. `#[non_exhaustive]` on `ManageError`, `PorterDuff`, `BlendMode` and `IccError`, and `Hash` on those types. `Display`/`FromStr` for `PorterDuff` and `BlendMode` are done, from one name table. Still open: an optional `serde` feature.
 - [~] `tpt_colour::prelude`, and `tone` and `RenderingIntent` re-exported from the facade. The builtin profile enum is still open.
-- [ ] u8/u16 interleaved image API with stride and alpha handling
+- [x] u8/u16 interleaved image API with stride and alpha handling: `transform_u8`, `transform_u16`, `transform_u8_image` and `transform_u16_image` (`tests/image_layout.rs`). Padding and alpha are never touched. `IccError::BufferLayout` reports a short buffer or a stride shorter than a row
 
 ### Missing features
-- [~] Colour parsing: hex (`#rgb`, `#rgba`, `#rrggbb`, `#rrggbbaa`) is done in `tpt_colour_core::hex`. Still open: `rgb()`, `oklch()`, named colours, and u8 helpers.
+- [~] Colour parsing: hex (`#rgb`, `#rgba`, `#rrggbb`, `#rrggbbaa`) is in `tpt_colour_core::hex`. `rgb()`/`rgba()`, `oklch()`, the 148 named colours and `transparent` are in `tpt_colour_core::parse`, through `parse_colour`. Still open: u8 helpers.
 - [x] Interpolation in Oklab and Oklch, with the shorter hue arc, and premultiplied gradients (`mix_premultiplied_oklab`).
 - [x] HSL, HSV and HWB (`tpt_colour_core::models`), plus xyY.
 - [x] Delta E: 76, 94, CIEDE2000 (checked against the Sharma et al. reference pairs) and Oklab ΔEOK (`tpt_colour_core::difference`).
-- [~] WCAG 2 contrast ratio (`tpt_colour_core::contrast`). APCA is still open.
+- [x] WCAG 2 contrast ratio and APCA (`tpt_colour_core::contrast`, `apca_contrast`, APCA 0.0.98G-4g, checked against its black and white values).
 - [~] Gray kTRC profiles: done (`ProfileModel::Gray`, PCS is D50 · Y). Still open: Lab/XYZ/device-link/abstract profile classes.
 - [~] HLG OETF and inverse (`tone::hlg_oetf`, `hlg_eotf`). Still open: more tone mappers (BT.2390, ACES, AgX), ICtCp, Jzazbz.
-- [~] Spaces: Adobe RGB (1998) and ProPhoto RGB are done. Still open: ACEScg, scRGB, Luv, D50 Lab, arbitrary white points, CAT02/CAT16.
+- [~] Spaces: Adobe RGB (1998), ProPhoto RGB and CIE Luv (`space::Luv`) are done. Still open: ACEScg, scRGB, D50 Lab, arbitrary white points, CAT02/CAT16.
 - [x] Blend modes: ColorDodge, ColorBurn, SoftLight, and the non-separable Hue, Saturation, Color and Luminosity (`blend_rgb`). Linear vs encoded blending is documented: the arithmetic is on the values passed in.
-- [~] Rec. 601 Y′CbCr is done (`YCbCr::REC601`). Still open: limited-range YCbCr and YCoCg.
+- [x] Rec. 601 Y′CbCr (`YCbCr::REC601`), limited (studio-swing) range (`encode_limited`/`decode_limited`), and YCoCg (`ycocg_encode`/`ycocg_decode`, the non-reversible float form). YCoCg-R (integer lifting) is not done.
 - [ ] `mpet` (D2B/B2D), `ncl2`; ICC profile writer/embedder; profile ID checksum validation
-- [ ] Colour-blindness simulation; palette generation; gamut mapping for LUT destination profiles
+- [x] Colour-blindness simulation: `tpt_colour_core::vision::simulate` for protanopia, deuteranopia and tritanopia (Machado 2009, severity 1.0). Palette generation: `tpt_colour_core::palette` (complement, analogous, triadic, split-complementary, with a chroma-reducing sRGB fit). Gamut mapping for LUT destinations is closed, see the Found this round list
 
 ### Innovation
 - [ ] Public determinism conformance suite with golden bit-pattern vectors
 - [ ] `tpt-colour doctor`: ICC profile linter/explainer
-- [ ] `ColourTransform::describe()` returning the stage graph
+- [x] `ColourTransform::describe()` returns the stage graph as `Vec<Step>`, in application order, from the same stages the transform runs
 - [~] Bake a transform to a 33^3 CLUT: done (`bake_clut`), and `.cube` export (`to_cube`, CLI `cube`). Still open: WGSL/GLSL shader generation.
 - [ ] WASM gamut-mapping playground
-- [ ] Soft-proofing helper with out-of-gamut mask
+- [x] Soft-proofing helper with out-of-gamut mask: `tpt_colour_manage::SoftProof`. The mask is ΔE₀₀ between the input and its working → proof → working round trip, in D50 Lab. Proof profiles may have up to four channels. Tested with P3 and sRGB proofs. CMYK not tested here, as no CMYK profile is available
 - [ ] OSS-Fuzz integration; documented "no panics, bounded memory" limits
 - [ ] Public parity report vs LittleCMS/moxcms/palette, regenerated by CI
 

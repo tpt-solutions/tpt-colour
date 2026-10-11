@@ -75,6 +75,11 @@ impl Pipeline {
         })
     }
 
+    /// The stages in the order they are applied.
+    pub(crate) fn stages(&self) -> &[Stage] {
+        &self.stages
+    }
+
     /// Number of input channels.
     #[must_use]
     pub fn input_channels(&self) -> usize {
@@ -246,6 +251,16 @@ pub(crate) struct Clut {
 }
 
 impl Clut {
+    /// Grid points along each input axis.
+    pub(crate) fn grid(&self) -> &[usize] {
+        &self.grid
+    }
+
+    /// Number of output channels.
+    pub(crate) fn outputs(&self) -> usize {
+        self.out_ch
+    }
+
     /// Number of samples a CLUT with this grid and output count holds.
     ///
     /// Malformed grids (empty, a side under two points) are `BadTag`. Valid grids beyond the

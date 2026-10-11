@@ -11,6 +11,7 @@ extern crate alloc;
 mod batch;
 mod black;
 mod bytes;
+mod describe;
 mod error;
 mod lut;
 mod lut_tags;
@@ -22,6 +23,7 @@ mod tag;
 mod transform;
 mod trc;
 
+pub use describe::Step;
 pub use error::IccError;
 pub use lut::Pipeline;
 pub use profile::{

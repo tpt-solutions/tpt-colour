@@ -4,6 +4,7 @@
 #![no_std]
 
 mod math;
+mod named;
 
 pub mod composite;
 pub mod contrast;
@@ -11,4 +12,7 @@ pub mod difference;
 pub mod hex;
 pub mod mix;
 pub mod models;
+pub mod palette;
+pub mod parse;
 pub mod space;
+pub mod vision;
